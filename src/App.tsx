@@ -14,10 +14,13 @@ import {
   User as UserIcon,
   Sun,
   Moon,
+  Copy,
+  RotateCcw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { KOREAN_HOLIDAYS, START_TIMES, END_TIMES, WEEKEND_TIMES, HALF_DAY_TIMES } from './constants';
-import { loadMonth, saveMonth, exportAll, importAll, MonthSchedule } from './storage';
+import { START_TIMES, END_TIMES, WEEKEND_TIMES, HALF_DAY_TIMES } from './constants';
+import { loadMonth, saveMonth, exportAll, importAll, MonthSchedule, DayEntry } from './storage';
+import { getHolidaysForYear } from './holidays';
 import * as drive from './googleDrive';
 
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
@@ -41,6 +44,7 @@ export default function App() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [schedule, setSchedule] = useState<MonthSchedule>({});
+  const [holidays, setHolidays] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [isDirty, setIsDirty] = useState(false);
@@ -91,6 +95,16 @@ export default function App() {
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
+  // Fetch holidays for selected month's year (cached, fallback to static)
+  useEffect(() => {
+    const year = Number(selectedMonth.split('-')[0]);
+    let cancelled = false;
+    getHolidaysForYear(year).then(h => {
+      if (!cancelled) setHolidays(h);
+    });
+    return () => { cancelled = true; };
+  }, [selectedMonth]);
+
   // After sign-in, pull from Drive and merge into IndexedDB
   const pullFromDrive = useCallback(async () => {
     if (!drive.isEnabled() || drive.getStatus() !== 'signed-in') return;
@@ -115,15 +129,20 @@ export default function App() {
     if (!drive.isEnabled() || drive.getStatus() !== 'signed-in') return;
     setSyncState('syncing');
     try {
-      const all = await exportAll();
-      await drive.uploadAll(all);
+      const local = await exportAll();
+      // 충돌 보호: 원격을 받아 일자별로 m(modifiedAt) 더 최근인 쪽이 이기도록 병합
+      const merged = await drive.syncAll(local);
+      // 병합 결과를 로컬에도 반영
+      await importAll(merged);
+      const fresh = await loadMonth(selectedMonth);
+      setSchedule(fresh);
       setSyncState('synced');
       setTimeout(() => setSyncState('idle'), 1500);
     } catch (e) {
       console.error('Drive push failed', e);
       setSyncState('error');
     }
-  }, []);
+  }, [selectedMonth]);
 
   // Scroll to today
   useEffect(() => {
@@ -185,7 +204,7 @@ export default function App() {
   useEffect(() => {
     if (!isDataLoaded) return;
     const currentMonthPrefix = selectedMonth;
-    const holidayDates = daysInMonth.filter(day => KOREAN_HOLIDAYS[day.dateString]);
+    const holidayDates = daysInMonth.filter(day => holidays[day.dateString]);
     const missingHolidays = holidayDates.filter(day => {
       const entry = schedule[day.dateString];
       return day.dateString.startsWith(currentMonthPrefix) && (!entry || entry.type === 'normal');
@@ -213,12 +232,38 @@ export default function App() {
   const handleTimeChange = (dateString: string, field: 'start' | 'end' | 'type', value: string) => {
     setSchedule(prev => {
       const current = prev[dateString] || { start: '', end: '', type: 'normal' };
-      let newEntry = { ...current, [field]: value };
+      let newEntry: DayEntry = { ...current, [field]: value, m: Date.now() };
       if (newEntry.type === 'family' || newEntry.type === 'half-day') {
         newEntry.end = '';
       }
-      return { ...prev, [dateString]: newEntry as any };
+      return { ...prev, [dateString]: newEntry };
     });
+    setIsDirty(true);
+  };
+
+  const dateOffset = (dateString: string, daysBack: number): string => {
+    const d = new Date(dateString + 'T00:00:00');
+    d.setDate(d.getDate() - daysBack);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  /** 다른 날짜 항목 복사 (출/퇴근/유형). 같은 월 안에서만 동작 */
+  const copyFromDate = async (targetDate: string, sourceDate: string) => {
+    let source: DayEntry | undefined = schedule[sourceDate];
+    // 같은 월이 아니면 다른 월에서 로드
+    if (!source && !sourceDate.startsWith(selectedMonth)) {
+      const otherMonth = sourceDate.slice(0, 7);
+      const otherData = await loadMonth(otherMonth);
+      source = otherData[sourceDate];
+    }
+    if (!source || (!source.start && !source.end && source.type === 'normal')) {
+      alert('복사할 데이터가 없습니다.');
+      return;
+    }
+    setSchedule(prev => ({
+      ...prev,
+      [targetDate]: { start: source!.start, end: source!.end, type: source!.type, m: Date.now() },
+    }));
     setIsDirty(true);
   };
 
@@ -618,11 +663,31 @@ export default function App() {
                     <div className={`sm:w-44 font-medium flex items-center flex-wrap gap-x-2 gap-y-1 ${dayColor}`}>
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`}></span>
                       <span className="flex-shrink-0">{day.dayNumber}일 ({day.dayName})</span>
-                      {KOREAN_HOLIDAYS[day.dateString] && (
-                        <span className="text-[10px] text-red-500 font-bold px-1.5 py-0.5 bg-red-50 rounded-md whitespace-nowrap">{KOREAN_HOLIDAYS[day.dateString]}</span>
+                      {holidays[day.dateString] && (
+                        <span className="text-[10px] text-red-500 font-bold px-1.5 py-0.5 bg-red-50 rounded-md whitespace-nowrap">{holidays[day.dateString]}</span>
                       )}
                       {isToday && (
                         <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-md font-bold animate-pulse whitespace-nowrap">오늘</span>
+                      )}
+                      {!isWeekend && type === 'normal' && (
+                        <span className="flex items-center gap-1 ml-auto">
+                          <button
+                            onClick={() => copyFromDate(day.dateString, dateOffset(day.dateString, 1))}
+                            className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50"
+                            title="어제와 동일하게 입력"
+                            aria-label="어제와 동일"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => copyFromDate(day.dateString, dateOffset(day.dateString, 7))}
+                            className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50"
+                            title="지난주 같은 요일과 동일하게 입력"
+                            aria-label="지난주 같은 요일과 동일"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        </span>
                       )}
                     </div>
 

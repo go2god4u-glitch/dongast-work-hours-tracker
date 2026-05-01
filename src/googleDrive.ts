@@ -3,7 +3,8 @@
 // - 다른 사용자/앱은 이 파일에 접근할 수 없습니다 (drive.appdata 스코프 한정).
 // - 토큰은 메모리에만 보관 (1시간 만료). 만료 시 silent re-auth 시도.
 
-import type { MonthSchedule } from './storage';
+import type { AllMonths } from './storage';
+import { mergeAll } from './storage';
 
 declare global {
   interface Window {
@@ -133,7 +134,15 @@ const findFileId = async (token: string): Promise<string | null> => {
   return cachedFileId;
 };
 
-export const downloadAll = async (): Promise<Record<string, MonthSchedule> | null> => {
+/** 충돌 보호: Drive에 있는 데이터를 받아 로컬과 병합 후 업로드. 병합본 반환. */
+export const syncAll = async (local: AllMonths): Promise<AllMonths> => {
+  const remote = await downloadAll();
+  const merged = remote ? mergeAll(local, remote) : local;
+  await uploadAll(merged);
+  return merged;
+};
+
+export const downloadAll = async (): Promise<AllMonths | null> => {
   const token = await ensureToken();
   const id = await findFileId(token);
   if (!id) return null;
@@ -141,10 +150,10 @@ export const downloadAll = async (): Promise<Record<string, MonthSchedule> | nul
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!r.ok) throw new Error(`Drive download failed: ${r.status}`);
-  return (await r.json()) as Record<string, MonthSchedule>;
+  return (await r.json()) as AllMonths;
 };
 
-export const uploadAll = async (payload: Record<string, MonthSchedule>): Promise<void> => {
+export const uploadAll = async (payload: AllMonths): Promise<void> => {
   const token = await ensureToken();
   const body = JSON.stringify(payload);
   const id = await findFileId(token);
