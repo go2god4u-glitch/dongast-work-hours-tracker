@@ -153,10 +153,24 @@ html.pastel, html.pastel body { background: linear-gradient(180deg, #f5f3ff, #ec
 
 html.pastel .bg-gradient-to-br.from-indigo-600 {
   background-image: linear-gradient(to bottom right, #c4b5fd, #fbcfe8, #fde68a) !important;
+}
+/* 파스텔 헤더는 밝은 배경 → 텍스트를 진한 보라색으로 강제 */
+html.pastel .bg-gradient-to-br.from-indigo-600 h1,
+html.pastel .bg-gradient-to-br.from-indigo-600 p,
+html.pastel .bg-gradient-to-br.from-indigo-600 .text-white,
+html.pastel .bg-gradient-to-br.from-indigo-600 .text-indigo-100,
+html.pastel .bg-gradient-to-br.from-indigo-600 .text-indigo-200,
+html.pastel .bg-gradient-to-br.from-indigo-600 input[type="month"],
+html.pastel .bg-gradient-to-br.from-indigo-600 button,
+html.pastel .bg-gradient-to-br.from-indigo-600 a {
   color: #4c1d95 !important;
 }
-html.pastel .bg-gradient-to-br.from-indigo-600 * {
-  color: #4c1d95;
+html.pastel .bg-gradient-to-br.from-indigo-600 .glass {
+  background: rgba(255,255,255,0.4) !important;
+  border-color: rgba(124,58,237,0.25);
+}
+html.pastel .bg-gradient-to-br.from-indigo-600 svg {
+  color: #5b21b6;
 }
 html.pastel .bg-gradient-to-br.from-gray-900 {
   background-image: linear-gradient(to bottom right, #5b21b6, #7c3aed, #a78bfa) !important;

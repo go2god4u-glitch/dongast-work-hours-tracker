@@ -959,34 +959,34 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                     <Calculator className="w-5 h-5 text-indigo-300" />
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-xs text-gray-400">목표 근무 시간 (평일×8h)</span>
-                    <span className="text-lg font-medium text-gray-200 num"><CountUp value={targetMonthlyHours} />시간</span>
+                    <span className="text-xs text-gray-300">목표 근무 시간 (평일×8h)</span>
+                    <span className="text-lg font-medium text-white num"><CountUp value={targetMonthlyHours} />시간</span>
                   </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-4 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end border-t border-gray-700 sm:border-t-0 pt-3 sm:pt-0">
                 <div className="flex flex-col items-end">
-                  <span className="text-xs text-gray-400">현재 누적 시간</span>
-                  <div className="text-xl sm:text-2xl font-bold text-indigo-300 num">
-                    <CountUp value={totalHours} decimals={Number.isInteger(totalHours) ? 0 : 1} /> <span className="text-sm font-medium text-gray-400">시간</span>
+                  <span className="text-xs text-gray-300">현재 누적 시간</span>
+                  <div className="text-xl sm:text-2xl font-bold text-indigo-200 num">
+                    <CountUp value={totalHours} decimals={Number.isInteger(totalHours) ? 0 : 1} /> <span className="text-sm font-medium text-gray-300">시간</span>
                   </div>
                 </div>
 
-                <div className="w-px h-10 bg-gray-700 hidden sm:block"></div>
+                <div className="w-px h-10 bg-white/20 hidden sm:block"></div>
 
                 <div className="flex flex-col items-end min-w-[80px]">
-                  <span className="text-xs text-gray-400 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 animate-twinkle text-indigo-300" />
-                    초과/부족
+                  <span className="text-xs text-gray-300 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 animate-twinkle text-indigo-200" />
+                    {hoursDifference > 0 ? '초과' : hoursDifference < 0 ? '부족' : '목표 달성'}
                   </span>
                   <div
                     className={`text-xl sm:text-2xl num ${diffWeight} ${diffPulse} ${
-                      hoursDifference > 0 ? 'text-emerald-400' : hoursDifference === 0 ? 'text-gray-300' : ''
+                      hoursDifference > 0 ? 'text-emerald-300' : hoursDifference === 0 ? 'text-gray-200' : ''
                     } transition-colors duration-300`}
                     style={diffStyle}
                   >
-                    {hoursDifference > 0 ? '+' : ''}<CountUp value={hoursDifference} decimals={Number.isInteger(hoursDifference) ? 0 : 1} /> <span className="text-sm font-medium text-gray-400">시간</span>
+                    {hoursDifference > 0 ? '+' : ''}<CountUp value={hoursDifference} decimals={Number.isInteger(hoursDifference) ? 0 : 1} /> <span className="text-sm font-medium text-gray-300">시간</span>
                   </div>
                 </div>
               </div>
