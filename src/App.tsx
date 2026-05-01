@@ -232,12 +232,40 @@ export default function App() {
 
   const handleExport = async () => {
     const all = await exportAll();
-    const blob = new Blob([JSON.stringify(all, null, 2)], { type: 'application/json' });
+    const json = JSON.stringify(all, null, 2);
+    const today = new Date().toISOString().split('T')[0];
+    const filename = `work-hours-${today}.json`;
+    const blob = new Blob([json], { type: 'application/json' });
+
+    // 1) Web Share API (iOS PWA 포함 모바일에서 가장 신뢰성 높음)
+    try {
+      const file = new File([blob], filename, { type: 'application/json' });
+      const navAny = navigator as any;
+      if (navAny.canShare && navAny.canShare({ files: [file] })) {
+        await navAny.share({ files: [file], title: '근무 시간 백업' });
+        return;
+      }
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return; // 사용자가 공유 취소
+      console.warn('Web Share failed, falling back', err);
+    }
+
+    // 2) iOS standalone PWA (홈 화면 앱) — 다운로드가 막히므로 새 탭에서 열고 안내
+    if (isIOS() && isStandalone()) {
+      const dataUrl = `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
+      window.open(dataUrl, '_blank');
+      alert('새 탭에서 열린 텍스트를 길게 눌러 "공유" → "파일에 저장"을 선택하세요.');
+      return;
+    }
+
+    // 3) 일반 브라우저 — 기존 방식
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `work-hours-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.download = filename;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     URL.revokeObjectURL(url);
   };
 
