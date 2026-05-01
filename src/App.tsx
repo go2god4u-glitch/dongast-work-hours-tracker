@@ -307,20 +307,57 @@ export default function App() {
     }
   };
 
+  // 월 171시간 법정 상한: 평일 기본근무가 누적해서 171시간을 넘으면
+  // 마지막 주 금요일부터 역순으로 차감 (휴일/휴가 금요일은 건너뜀)
+  const capInfo = useMemo(() => {
+    let baseTarget = 0;
+    daysInMonth.forEach(day => {
+      if (day.isSunday || day.isSaturday) return;
+      const t = schedule[day.dateString]?.type;
+      if (t === 'holiday' || t === 'vacation') return;
+      if (t === 'half-day') baseTarget += 4;
+      else baseTarget += 8; // normal, family
+    });
+
+    const reductions: Record<string, number> = {};
+    if (baseTarget <= 171) return { reductions, target: baseTarget };
+
+    let excess = baseTarget - 171;
+    const eligibleFridays = daysInMonth
+      .filter(d => d.isFriday)
+      .reverse() // 마지막 금요일부터
+      .filter(d => {
+        const t = schedule[d.dateString]?.type;
+        return t !== 'holiday' && t !== 'vacation';
+      });
+
+    for (const f of eligibleFridays) {
+      if (excess <= 0) break;
+      const t = schedule[f.dateString]?.type;
+      const cap = t === 'half-day' ? 4 : 8;
+      const cut = Math.min(excess, cap);
+      reductions[f.dateString] = cut;
+      excess -= cut;
+    }
+    return { reductions, target: Math.max(171, baseTarget - (baseTarget - 171 - excess)) };
+  }, [daysInMonth, schedule]);
+
   const dailyHours = useMemo(() => {
     const hours: Record<string, number> = {};
     daysInMonth.forEach(day => {
       const s = schedule[day.dateString] || { start: '', end: '', type: 'normal' };
+      const reduction = capInfo.reductions[day.dateString] || 0;
+
       if (s.type === 'holiday' || s.type === 'vacation') {
         hours[day.dateString] = 0;
         return;
       }
       if (s.type === 'family') {
-        hours[day.dateString] = 8;
+        hours[day.dateString] = Math.max(0, 8 - reduction);
         return;
       }
       if (s.type === 'half-day') {
-        hours[day.dateString] = 4;
+        hours[day.dateString] = Math.max(0, 4 - reduction);
         return;
       }
       const hasInput = s.start && s.end;
@@ -337,11 +374,11 @@ export default function App() {
           hours[day.dateString] = 0;
         }
       } else {
-        hours[day.dateString] = (day.isSunday || day.isSaturday) ? 0 : 8;
+        hours[day.dateString] = (day.isSunday || day.isSaturday) ? 0 : Math.max(0, 8 - reduction);
       }
     });
     return hours;
-  }, [schedule, daysInMonth]);
+  }, [schedule, daysInMonth, capInfo]);
 
   const totalHours = useMemo(
     () => Object.values(dailyHours).reduce((sum: number, h: number) => sum + h, 0),
@@ -369,7 +406,7 @@ export default function App() {
         }
       }
     });
-    return target;
+    return Math.min(target, 171);
   }, [daysInMonth, schedule]);
 
   const hoursDifference = totalHours - targetMonthlyHours;
