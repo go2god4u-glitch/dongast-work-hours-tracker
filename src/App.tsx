@@ -67,6 +67,8 @@ export default function App() {
     setShowIntro(false);
   };
 
+  const [nowPromptDismissed, setNowPromptDismissed] = useState(false);
+
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     try {
       const saved = localStorage.getItem('theme');
@@ -416,6 +418,47 @@ export default function App() {
 
   const hoursDifference = totalHours - targetMonthlyHours;
 
+  /**
+   * "지금 출근/퇴근" 1-탭 기록 안내.
+   * - 평일이고 오늘 날짜가 현재 보고 있는 월에 속할 때만
+   * - 휴일/휴가/패밀리/반차 유형이면 안 띄움
+   * - 출근 시간대(07-10시)에 start 미입력
+   * - 퇴근 시간대(16-22시)에 end 미입력
+   * - 닫기 누르면 새로고침 전까지 다시 안 뜸
+   */
+  const nowPrompt = useMemo(() => {
+    if (nowPromptDismissed || !isDataLoaded) return null;
+    if (!todayDateString.startsWith(selectedMonth)) return null;
+    const now = new Date();
+    const dow = now.getDay();
+    if (dow === 0 || dow === 6) return null;
+
+    const today = schedule[todayDateString];
+    if (today?.type && today.type !== 'normal') return null;
+
+    const total = now.getHours() * 60 + now.getMinutes();
+    const rounded = Math.round(total / 30) * 30;
+    const h = Math.floor(rounded / 60) % 24;
+    const m = rounded % 60;
+    const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+
+    const hour = now.getHours();
+    if (hour >= 7 && hour <= 10 && !today?.start) return { kind: 'start' as const, time };
+    if (hour >= 16 && hour <= 22 && !today?.end) return { kind: 'end' as const, time };
+    return null;
+  }, [todayDateString, schedule, isDataLoaded, selectedMonth, nowPromptDismissed]);
+
+  const acceptNowPrompt = () => {
+    if (!nowPrompt) return;
+    handleTimeChange(todayDateString, nowPrompt.kind, nowPrompt.time);
+    setNowPromptDismissed(true);
+  };
+
+  const progressPercent = useMemo(() => {
+    if (targetMonthlyHours <= 0) return 0;
+    return Math.min(100, (totalHours / targetMonthlyHours) * 100);
+  }, [totalHours, targetMonthlyHours]);
+
   const renderSyncBadge = () => {
     if (!drive.isEnabled()) {
       return (
@@ -579,6 +622,35 @@ export default function App() {
             </AnimatePresence>
           </div>
 
+          {/* Now-clock prompt */}
+          {nowPrompt && (
+            <div className="mx-4 mt-4 sm:mx-6 bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-sm">
+              <div className="min-w-0">
+                <div className="font-bold text-indigo-900 text-sm mb-0.5">
+                  {nowPrompt.kind === 'start' ? '지금 출근하셨나요?' : '지금 퇴근하시나요?'}
+                </div>
+                <div className="text-xs text-indigo-700">
+                  현재 시각을 30분 단위로 반올림해 <b>{nowPrompt.time}</b>으로 기록합니다.
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={acceptNowPrompt}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold px-3 sm:px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+                >
+                  {nowPrompt.time} 기록
+                </button>
+                <button
+                  onClick={() => setNowPromptDismissed(true)}
+                  className="text-gray-500 hover:text-gray-700 text-xs sm:text-sm px-2 py-2"
+                  aria-label="닫기"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Content */}
           <div className="px-4 py-4 sm:p-6">
             <div className="space-y-2">
@@ -723,7 +795,8 @@ export default function App() {
           style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1rem)' }}
         >
           <div className="w-full max-w-3xl pointer-events-auto">
-            <div className="flex flex-col sm:flex-row items-center justify-between bg-gray-900/95 backdrop-blur-md rounded-2xl p-4 sm:p-6 text-white shadow-2xl border border-gray-800 gap-4">
+            <div className="flex flex-col bg-gray-900/95 backdrop-blur-md rounded-2xl p-4 sm:p-6 text-white shadow-2xl border border-gray-800 gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-white/10 rounded-lg hidden sm:block">
@@ -753,6 +826,22 @@ export default function App() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
+                <div
+                  className={`h-2 rounded-full transition-all duration-500 ${
+                    hoursDifference >= 0 ? 'bg-emerald-400' : 'bg-indigo-400'
+                  }`}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <span className="text-xs font-bold text-gray-300 w-12 text-right tabular-nums">
+                {Math.round(progressPercent)}%
+              </span>
+            </div>
             </div>
           </div>
         </div>
