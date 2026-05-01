@@ -840,7 +840,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                     const [eh, em] = endStr.split(':').map(Number);
                     const endDate = new Date(now);
                     endDate.setHours(eh, em, 0, 0);
-                    if (now >= endDate) return '퇴근 후 💕';
+                    if (now >= endDate) return '퇴근 💕';
                     const totalMin = Math.ceil((endDate.getTime() - now.getTime()) / 60000);
                     const h = Math.floor(totalMin / 60);
                     const m = totalMin % 60;
