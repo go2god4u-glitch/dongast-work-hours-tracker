@@ -1,7 +1,7 @@
 {
-  "name": "근무 시간 기록기",
-  "short_name": "근무시간",
-  "description": "월간 근무 시간 입력 및 집계",
+  "name": "오늘도 출근!",
+  "short_name": "오늘도 출근!",
+  "description": "월간 출퇴근 시간 기록 및 집계",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

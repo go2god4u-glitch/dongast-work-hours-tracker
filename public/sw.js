@@ -1,5 +1,5 @@
 // PWA SW: scope에 종속된 상대경로 사용 (서브패스 배포 호환)
-const CACHE = 'wht-v5';
+const CACHE = 'wht-v6';
 const SCOPE = self.registration.scope; // 예: https://user.github.io/repo/
 const SHELL = ['', 'index.html', 'manifest.webmanifest', 'icon.svg', 'apple-touch-icon.png'].map(
   (p) => SCOPE + p

@@ -826,7 +826,12 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                 <Calendar className="w-6 h-6 md:w-8 md:h-8 text-white" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-xl md:text-2xl font-bold truncate">월간 근무 시간 입력</h1>
+                <h1 className="text-xl md:text-2xl font-bold truncate">{(() => {
+                  const h = new Date().getHours();
+                  if (h < 12) return '오늘도 출근! 💪🏻';
+                  if (h < 18) return '수고했어요! 🤗';
+                  return '퇴근 후 💕';
+                })()}</h1>
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   {renderSyncBadge()}
                   <span className="bg-indigo-800/50 px-2 py-0.5 rounded text-[10px] md:text-xs break-keep">
