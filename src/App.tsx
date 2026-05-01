@@ -5,8 +5,6 @@ import {
   Calculator,
   CheckCircle2,
   AlertCircle,
-  Download,
-  Upload,
   Cloud,
   CloudOff,
   LogIn,
@@ -57,7 +55,6 @@ export default function App() {
   const [user, setUser] = useState<drive.UserInfo | null>(drive.getUser());
   const [syncState, setSyncState] = useState<SyncState>(drive.isEnabled() ? 'idle' : 'offline');
   const todayRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [showIntro, setShowIntro] = useState(() => {
     try {
       return localStorage.getItem('intro_dismissed') !== '1' && isIOS() && !isStandalone();
@@ -323,66 +320,6 @@ export default function App() {
     setSyncState('idle');
   };
 
-  const handleExport = async () => {
-    const all = await exportAll();
-    const json = JSON.stringify(all, null, 2);
-    const today = new Date().toISOString().split('T')[0];
-    const filename = `work-hours-${today}.json`;
-    const blob = new Blob([json], { type: 'application/json' });
-
-    // 1) Web Share API (iOS PWA 포함 모바일에서 가장 신뢰성 높음)
-    try {
-      const file = new File([blob], filename, { type: 'application/json' });
-      const navAny = navigator as any;
-      if (navAny.canShare && navAny.canShare({ files: [file] })) {
-        await navAny.share({ files: [file], title: '근무 시간 백업' });
-        return;
-      }
-    } catch (err: any) {
-      if (err?.name === 'AbortError') return; // 사용자가 공유 취소
-      console.warn('Web Share failed, falling back', err);
-    }
-
-    // 2) iOS standalone PWA (홈 화면 앱) — 다운로드가 막히므로 새 탭에서 열고 안내
-    if (isIOS() && isStandalone()) {
-      const dataUrl = `data:application/json;charset=utf-8,${encodeURIComponent(json)}`;
-      window.open(dataUrl, '_blank');
-      alert('새 탭에서 열린 텍스트를 길게 눌러 "공유" → "파일에 저장"을 선택하세요.');
-      return;
-    }
-
-    // 3) 일반 브라우저 — 기존 방식
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const parsed = JSON.parse(text);
-      await importAll(parsed);
-      const fresh = await loadMonth(selectedMonth);
-      setSchedule(fresh);
-      if (drive.isEnabled() && drive.getStatus() === 'signed-in') {
-        pushToDrive();
-      }
-      alert('백업 파일을 불러왔습니다.');
-    } catch (err) {
-      alert('파일을 읽지 못했습니다.');
-      console.error(err);
-    } finally {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
   // 월 171시간 법정 상한: 일반 근무일은 최소 6시간 유지(=하루당 최대 2시간만 차감).
   // 우선순위: 마지막 주 금요일 → 거슬러 올라가며 모든 금요일 → 목요일 → 수요일 → 화요일 → 월요일.
   // 패밀리데이/공휴일/휴가/반차는 차감 대상 제외.
@@ -578,18 +515,16 @@ export default function App() {
                       <UserIcon className="w-4 h-4" />
                     )}
                     <span className="text-xs truncate max-w-[100px]">{user.name || user.email}</span>
-                    {user.email === ADMIN_EMAIL && (
-                      <a
-                        href={ADD_USER_URL}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-indigo-200 hover:text-white"
-                        title="Google Cloud Console에서 테스트 사용자 Gmail 추가 (관리자 전용)"
-                        aria-label="사용자 추가"
-                      >
-                        <UserPlus className="w-3.5 h-3.5" />
-                      </a>
-                    )}
+                    <a
+                      href={ADD_USER_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-200 hover:text-white"
+                      title="Google Cloud Console에서 테스트 사용자 Gmail 추가 (관리자 전용 - 권한 없으면 Google이 자동 차단)"
+                      aria-label="사용자 추가"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                    </a>
                     <button onClick={handleSignOut} className="text-indigo-200 hover:text-white">
                       <LogOut className="w-3.5 h-3.5" />
                     </button>
@@ -603,27 +538,6 @@ export default function App() {
                 >
                   {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
                 </button>
-                <button
-                  onClick={handleExport}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
-                  title="모든 월 데이터 백업 다운로드"
-                >
-                  <Download className="w-3.5 h-3.5" /> 백업
-                </button>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
-                  title="백업 파일에서 복원"
-                >
-                  <Upload className="w-3.5 h-3.5" /> 복원
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="application/json"
-                  className="hidden"
-                  onChange={handleImport}
-                />
               </div>
             </div>
           </div>
