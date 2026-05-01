@@ -30,6 +30,44 @@ let tokenExpiryMs = 0;
 let cachedFileId: string | null = null;
 let userInfo: UserInfo | null = null;
 
+// === 세션 영속화 ===
+// 페이지 리로드(브라우저 닫고 다시 열기 포함) 시 로그인 풀림 방지를 위해
+// 액세스 토큰 + 사용자 정보를 localStorage에 저장. 만료 시 자동 정리.
+const SESSION_KEY = 'drive_session_v1';
+interface PersistedSession {
+  accessToken: string;
+  expiryMs: number;
+  user: UserInfo | null;
+}
+const saveSession = () => {
+  if (!accessToken || Date.now() >= tokenExpiryMs) return;
+  try {
+    const data: PersistedSession = { accessToken, expiryMs: tokenExpiryMs, user: userInfo };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(data));
+  } catch {}
+};
+const clearSession = () => {
+  try { localStorage.removeItem(SESSION_KEY); } catch {}
+};
+const restoreSession = () => {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return;
+    const s = JSON.parse(raw) as PersistedSession;
+    if (s && s.accessToken && Date.now() < s.expiryMs) {
+      accessToken = s.accessToken;
+      tokenExpiryMs = s.expiryMs;
+      userInfo = s.user || null;
+    } else {
+      clearSession();
+    }
+  } catch {
+    clearSession();
+  }
+};
+// 모듈 로드 시 즉시 복원
+restoreSession();
+
 export const isEnabled = () => !!clientId;
 
 const waitForGoogle = () =>
@@ -67,6 +105,7 @@ const requestToken = (prompt: '' | 'consent' = ''): Promise<string> =>
       }
       accessToken = resp.access_token;
       tokenExpiryMs = Date.now() + (Number(resp.expires_in || 3600) - 60) * 1000;
+      saveSession();
       resolve(accessToken!);
     };
     try {
@@ -97,6 +136,7 @@ export const signIn = async (): Promise<UserInfo | null> => {
   if (!clientId) throw new Error('Google Client ID가 설정되지 않았습니다.');
   const token = await requestToken('consent');
   userInfo = await fetchUserInfo(token);
+  saveSession();
   return userInfo;
 };
 
@@ -109,6 +149,7 @@ export const signOut = () => {
   accessToken = null;
   tokenExpiryMs = 0;
   cachedFileId = null;
+  clearSession();
   userInfo = null;
 };
 
