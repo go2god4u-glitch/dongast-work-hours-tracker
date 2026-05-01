@@ -34,6 +34,7 @@ import { START_TIMES, END_TIMES, WEEKEND_TIMES, HALF_DAY_TIMES } from './constan
 import { loadMonth, saveMonth, exportAll, importAll, MonthSchedule, DayEntry } from './storage';
 import { getHolidaysForYear } from './holidays';
 import * as drive from './googleDrive';
+import Manual from './Manual';
 
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 const isStandalone = () =>
@@ -934,118 +935,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
               </button>
             </div>
             <div className="px-6 py-5 space-y-6 text-sm leading-relaxed text-gray-700">
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">1. 기본 입력</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>각 날짜별로 <b>근무 유형 / 출근 시간 / 퇴근 시간</b>을 선택</li>
-                  <li>시간은 <b>30분 단위</b>로만 선택 가능 (회사 정책)</li>
-                  <li>변경 즉시 자동 저장 — "모든 변경사항 저장됨" 메시지로 확인</li>
-                  <li>오늘 카드에 <b>인디고 강조 + "오늘" 배지</b>가 표시됨, 페이지 진입 시 오늘로 자동 스크롤</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">2. 근무 유형 5가지</h3>
-                <div className="space-y-1.5">
-                  <div><b>일반 근무</b> — 평일 기본. 주중 8시간, 주말 시 1.5배</div>
-                  <div><b>패밀리데이</b> — 금요일 한정 옵션. 8시간 자동 인정</div>
-                  <div><b>공휴일</b> — 0시간. 한국 공휴일은 자동 마킹</div>
-                  <div><b>휴가</b> — 0시간. 목표 시간에서도 제외</div>
-                  <div><b>반차</b> — 4시간 (평일 한정)</div>
-                </div>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">3. 자동 계산 규칙</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>주중: 입력 시간에서 <b>휴게시간 1시간 차감</b> (13시간 이상 근무 시 1.5시간)</li>
-                  <li>주말 근무: 차감 없이 <b>1.5배</b> 가산</li>
-                  <li><b>월 171시간 법정 상한</b>: 평일×8시간이 171시간을 넘으면 마지막 주 금요일부터 거꾸로 자동 차감 (한 날 최대 2시간, 최소 6시간 보장 → 부족 시 목/수/화/월로 cascade)</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">4. 빠른 입력 버튼</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>평일 일반 근무 카드 우상단의 <b>📋 어제와 동일</b> / <b>↺ 지난주 같은 요일과 동일</b> 버튼</li>
-                  <li>클릭 시 출처 데이터를 미리 보여주고 확인 후 적용</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">5. "지금 출근 / 지금 퇴근" 자동 안내</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>평일 출근 시간대(<b>07:00 ~ 10:59</b>)에 앱 진입 + 오늘 출근 미입력 → "지금 출근" 안내 배너</li>
-                  <li>평일 퇴근 시간대(<b>16:00 ~ 22:59</b>)에 진입 + 오늘 퇴근 미입력 → "지금 퇴근" 안내 배너</li>
-                  <li>현재 시각을 30분 단위로 반올림한 값으로 한 번에 기록</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">6. 데이터 저장</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li><b>로컬 (IndexedDB)</b>: 항상 자동 저장. 이 브라우저에서만 접근</li>
-                  <li><b>Google Drive 동기화</b>: 헤더의 "Google 로그인" 클릭 → 본인 Drive의 앱 전용 폴더에 자동 백업. 다른 기기에서 같은 계정 로그인 시 자동 다운로드</li>
-                  <li>같이 쓰는 사용자는 각자 본인 계정 데이터만 보관 (서로 격리)</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">7. 색상 코드</h3>
-                <div className="space-y-1.5">
-                  <div><span className="inline-block w-2 h-2 rounded-full bg-indigo-400 mr-2 align-middle" />평일 도트 (월·화·수·목·금 색상 다양)</div>
-                  <div><span className="inline-block w-2 h-2 rounded-full bg-red-400 mr-2 align-middle" />주말/공휴일</div>
-                  <div><span className="inline-block w-2 h-2 rounded-full bg-pink-400 mr-2 align-middle" />휴가/패밀리데이/반차</div>
-                  <div className="pt-2"><b>초과/부족 색</b>: 부족 1~3 옅은 빨강 → 3~5 중간 → 5~8 진함 → 8 초과 가장 진한 빨강 + 깜빡임</div>
-                </div>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">8. 테마 (☀️/🌙/👑/✨)</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>헤더 우측 토글 버튼 — 누를 때마다 <b>라이트 → 다크 → 핑크(공주) → 파스텔</b> 순환</li>
-                  <li>선택은 자동 저장되어 다음 방문에도 유지</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">9. iPhone 홈 화면 추가 (PWA)</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>Safari로 사이트 접속 → 하단 공유 버튼 → <b>"홈 화면에 추가"</b></li>
-                  <li>홈 화면 아이콘으로 실행 시 주소창 없이 standalone으로 동작</li>
-                  <li>오프라인에서도 캐시된 화면 열림</li>
-                  <li>iOS Safari가 7일 미사용 시 IndexedDB를 자동 삭제할 수 있으므로 <b>홈 화면 추가 + Google 로그인 권장</b></li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">10. 새로고침 (Pull-to-refresh)</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>페이지 최상단에서 손가락으로 <b>아래로 70px 이상</b> 끌고 놓으면 자동 새로고침</li>
-                  <li>인디케이터(↺)가 따라 내려오며 회전</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">11. 관리자 — 사용자 추가</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>헤더의 <b>👤➕ 버튼</b> 클릭 → Google Cloud Console "테스트 사용자" 페이지 열림</li>
-                  <li>같이 쓸 직원의 Gmail을 추가 (최대 100명, 무료)</li>
-                  <li>관리자(앱 소유자) 계정으로 로그인된 경우만 권한 있음 — 다른 사용자가 눌러도 Google이 자동 차단</li>
-                </ul>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-gray-900 mb-2">12. 빈 입력 시각 신호</h3>
-                <ul className="list-disc pl-5 space-y-1">
-                  <li>일반 근무 평일에서 출근/퇴근 미입력 시 셀렉트에 <b>옅은 노랑 outline</b> 표시</li>
-                  <li>실수로 빠뜨린 날 한눈에 식별</li>
-                </ul>
-              </section>
-
-              <section className="text-xs text-gray-500 pt-3 border-t border-gray-100">
-                문의 / 버그: <a href="https://github.com/go2god4u-glitch/dongast-work-hours-tracker/issues" className="underline" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
-              </section>
+              <Manual />
             </div>
           </div>
         </div>
