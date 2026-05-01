@@ -1092,7 +1092,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                     ) : (
                       <UserIcon className="w-4 h-4" />
                     )}
-                    <span className="text-xs truncate max-w-[100px]">{user.name || user.email}</span>
+                    <span className="text-xs truncate max-w-[140px]" title={user.email}>{user.email || user.name}</span>
                     <button
                       onClick={handleSignOut}
                       className="flex items-center gap-1 text-indigo-100 hover:text-white hover:bg-white/10 rounded-md px-1.5 py-0.5 transition-colors"
@@ -1118,7 +1118,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                     </button>
                   );
                 })()}
-                {user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() && (
+                {(user?.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase() && (
                   <>
                     <button
                       onClick={() => setShowAdminSettings(true)}
