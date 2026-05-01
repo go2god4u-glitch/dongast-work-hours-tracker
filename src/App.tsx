@@ -275,14 +275,35 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     }
   }, [selectedMonth]);
 
+  // Drive에 보낼 미저장 변경분이 있는지 추적 (UI 재렌더와 무관)
+  const driveDirtyRef = useRef(false);
+
+  // 조용한 백그라운드 업로드 — UI 상태나 schedule을 건드리지 않음.
+  // 성공해도 사용자에게 표시 안 함 (헤더 뱃지만 잠깐 sync 표시).
+  const silentPush = useCallback(async () => {
+    if (!drive.isEnabled() || drive.getStatus() !== 'signed-in') return;
+    if (!driveDirtyRef.current) return;
+    driveDirtyRef.current = false;
+    setSyncState('syncing');
+    try {
+      const local = await exportAll();
+      await drive.uploadAll(local);
+      setSyncState('synced');
+      setTimeout(() => setSyncState('idle'), 1500);
+    } catch (e) {
+      console.warn('Background drive push failed:', e);
+      driveDirtyRef.current = true; // 다음 주기 재시도
+      setSyncState('error');
+    }
+  }, []);
+
+  // 초기 pull/sync용 — 사용자가 명시적으로 동기화 요청 (signIn 직후 등)
   const pushToDrive = useCallback(async () => {
     if (!drive.isEnabled() || drive.getStatus() !== 'signed-in') return;
     setSyncState('syncing');
     try {
       const local = await exportAll();
-      // 충돌 보호: 원격을 받아 일자별로 m(modifiedAt) 더 최근인 쪽이 이기도록 병합
       const merged = await drive.syncAll(local);
-      // 병합 결과를 로컬에도 반영
       await importAll(merged);
       const fresh = await loadMonth(selectedMonth);
       setSchedule(fresh);
@@ -303,7 +324,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     return () => clearTimeout(timer);
   }, [isDataLoaded, selectedMonth]);
 
-  // Auto-save: IndexedDB immediately, Drive debounced
+  // 로컬 저장 — IndexedDB만, 1초 debounce. UI 즉각 반영. Drive와 무관.
   useEffect(() => {
     if (!isDirty || !isDataLoaded) return;
     const timer = setTimeout(async () => {
@@ -314,10 +335,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
         setSaveStatus('success');
         setIsDirty(false);
         setTimeout(() => setSaveStatus('idle'), 2000);
-        // Drive 업로드 (best-effort, 실패해도 로컬엔 저장됨)
-        if (drive.isEnabled() && drive.getStatus() === 'signed-in') {
-          pushToDrive();
-        }
+        driveDirtyRef.current = true; // 백그라운드 sync에 알림
       } catch (error) {
         console.error('Save failed:', error);
         setSaveStatus('error');
@@ -326,7 +344,25 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
       }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [schedule, isDirty, isDataLoaded, selectedMonth, pushToDrive]);
+  }, [schedule, isDirty, isDataLoaded, selectedMonth]);
+
+  // Drive 백그라운드 sync — 30초마다 미저장 변경분 일괄 업로드.
+  // + 탭 숨김 시 / 페이지 떠날 때 마지막 push로 데이터 보존.
+  useEffect(() => {
+    const interval = setInterval(silentPush, 30000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') silentPush();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', silentPush);
+    window.addEventListener('pagehide', silentPush);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', silentPush);
+      window.removeEventListener('pagehide', silentPush);
+    };
+  }, [silentPush]);
 
   const daysInMonth = useMemo(() => {
     const [year, month] = selectedMonth.split('-').map(Number);
