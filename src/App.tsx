@@ -365,20 +365,23 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
 
   // Drive에 보낼 미저장 변경분이 있는지 추적 (UI 재렌더와 무관)
   const driveDirtyRef = useRef(false);
+  // 연속 실패 카운터 — 일시적 끊김(iOS 백그라운드 fetch 중단 등)에 에러 뱃지 안 띄우기 위함
+  const failuresRef = useRef(0);
 
   // 조용한 백그라운드 동기화 — Drive와 일자별 modifiedAt 머지 후 업로드.
   // 다중 기기 동시 편집 보호: 두 기기에서 다른 날을 편집해도 둘 다 보존.
   // schedule 갱신은 실제 변경이 있을 때만 (불필요한 재렌더 방지).
+  // 연속 3회 이상 실패해야 사용자에게 에러 뱃지 표시 (단발성 끊김 무시).
   const silentPush = useCallback(async () => {
     if (!drive.isEnabled() || drive.getStatus() !== 'signed-in') return;
     if (!driveDirtyRef.current) return;
     driveDirtyRef.current = false;
+    // syncing 뱃지는 즉시 표시 (사용자에게 작업 중임을 알림)
     setSyncState('syncing');
     try {
       const local = await exportAll();
       const merged = await drive.syncAll(local);
       await importAll(merged);
-      // 현재 보고 있는 월에 실제 변화가 있을 때만 setSchedule
       const currentMerged = merged[selectedMonth] || {};
       setSchedule(prev => {
         const prevKeys = Object.keys(prev);
@@ -391,14 +394,30 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
             return currentMerged;
           }
         }
-        return prev; // 변화 없음 — 재렌더 회피
+        return prev;
       });
+      failuresRef.current = 0; // 성공 — 카운터 리셋
       setSyncState('synced');
       setTimeout(() => setSyncState('idle'), 1500);
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Background drive sync failed:', e);
       driveDirtyRef.current = true; // 다음 주기 재시도
-      setSyncState('error');
+      failuresRef.current += 1;
+      const msg = String(e?.message || e || '');
+      const looksLikeAuth = /401|unauthor|invalid_token|access_denied/i.test(msg);
+      // 토큰 만료성 오류면 silent refresh 한 번 시도 후 즉시 재시도
+      if (looksLikeAuth && drive.refreshUserInfo) {
+        try {
+          await drive.refreshUserInfo();
+          // 재시도는 다음 30초 주기로 자연스럽게
+        } catch {}
+      }
+      // 단발성 실패는 사용자에게 안 보임. 연속 3회 이상에만 에러 뱃지 표시.
+      if (failuresRef.current >= 3) {
+        setSyncState('error');
+      } else {
+        setSyncState('idle');
+      }
     }
   }, [selectedMonth]);
 
