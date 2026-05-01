@@ -454,10 +454,23 @@ export default function App() {
     setNowPromptDismissed(true);
   };
 
-  const progressPercent = useMemo(() => {
-    if (targetMonthlyHours <= 0) return 0;
-    return Math.min(100, (totalHours / targetMonthlyHours) * 100);
-  }, [totalHours, targetMonthlyHours]);
+  /**
+   * 부족 시간에 따라 색상이 점점 더 빨개지도록 HSL 보간.
+   * - 0시간 부족: 옅은 회색 톤
+   * - 12시간 이상 부족: 진한 빨강
+   * - 초과(diff >= 0): 에메랄드 그대로 유지
+   */
+  const diffStyle = useMemo<React.CSSProperties>(() => {
+    if (hoursDifference >= 0) return {};
+    const intensity = Math.min(1, Math.abs(hoursDifference) / 12);
+    const sat = 55 + 40 * intensity; // 55 → 95
+    const lig = 65 - 18 * intensity; // 65 → 47
+    return { color: `hsl(0, ${sat}%, ${lig}%)` };
+  }, [hoursDifference]);
+  const diffWeight =
+    hoursDifference < -8 ? 'font-extrabold' :
+    hoursDifference < -4 ? 'font-bold' : 'font-bold';
+  const diffPulse = hoursDifference < -10 ? 'animate-pulse' : '';
 
   const renderSyncBadge = () => {
     if (!drive.isEnabled()) {
@@ -821,31 +834,21 @@ export default function App() {
 
                 <div className="flex flex-col items-end min-w-[80px]">
                   <span className="text-xs text-gray-400">초과/부족</span>
-                  <div className={`text-xl sm:text-2xl font-bold ${hoursDifference > 0 ? 'text-emerald-400' : hoursDifference < 0 ? 'text-rose-400' : 'text-gray-300'}`}>
+                  <div
+                    className={`text-xl sm:text-2xl ${diffWeight} ${diffPulse} ${
+                      hoursDifference > 0 ? 'text-emerald-400' : hoursDifference === 0 ? 'text-gray-300' : ''
+                    } transition-colors duration-300`}
+                    style={diffStyle}
+                  >
                     {hoursDifference > 0 ? '+' : ''}{hoursDifference} <span className="text-sm font-medium text-gray-400">시간</span>
                   </div>
                 </div>
               </div>
             </div>
-
-            {/* Progress bar */}
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-2 rounded-full transition-all duration-500 ${
-                    hoursDifference >= 0 ? 'bg-emerald-400' : 'bg-indigo-400'
-                  }`}
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-              <span className="text-xs font-bold text-gray-300 w-12 text-right tabular-nums">
-                {Math.round(progressPercent)}%
-              </span>
-            </div>
-            </div>
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }
