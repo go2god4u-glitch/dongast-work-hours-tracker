@@ -20,6 +20,7 @@ import {
   HelpCircle,
   X,
   BarChart3,
+  Settings,
   TrendingUp,
   Award,
   Coffee,
@@ -30,11 +31,12 @@ import {
 const ADMIN_EMAIL = 'go2god4u@gmail.com';
 const ADD_USER_URL = 'https://console.cloud.google.com/auth/audience?project=dongast-work-hours';
 import { motion, AnimatePresence } from 'framer-motion';
-import { START_TIMES, END_TIMES, WEEKEND_TIMES, HALF_DAY_TIMES } from './constants';
 import { loadMonth, saveMonth, exportAll, importAll, MonthSchedule, DayEntry } from './storage';
 import { getHolidaysForYear } from './holidays';
 import * as drive from './googleDrive';
 import Manual from './Manual';
+import { AppConfig, loadConfig, saveConfig, generateTimes } from './config';
+import AdminSettings from './AdminSettings';
 
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
 const isStandalone = () =>
@@ -104,6 +106,12 @@ export default function App() {
   const [nowPromptDismissed, setNowPromptDismissed] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showRecap, setShowRecap] = useState(false);
+  const [showAdminSettings, setShowAdminSettings] = useState(false);
+  const [cfg, setCfg] = useState<AppConfig>(loadConfig);
+  const startTimes = useMemo(() => generateTimes(cfg.startTimeFrom, cfg.startTimeTo, cfg.timeSlotMinutes), [cfg.startTimeFrom, cfg.startTimeTo, cfg.timeSlotMinutes]);
+  const endTimes = useMemo(() => generateTimes(cfg.endTimeFrom, cfg.endTimeTo, cfg.timeSlotMinutes), [cfg.endTimeFrom, cfg.endTimeTo, cfg.timeSlotMinutes]);
+  const weekendTimes = useMemo(() => generateTimes(cfg.weekendTimeFrom, cfg.weekendTimeTo, cfg.timeSlotMinutes), [cfg.weekendTimeFrom, cfg.weekendTimeTo, cfg.timeSlotMinutes]);
+  const halfDayTimes = useMemo(() => generateTimes(cfg.halfDayTimeFrom, cfg.halfDayTimeTo, cfg.timeSlotMinutes), [cfg.halfDayTimeFrom, cfg.halfDayTimeTo, cfg.timeSlotMinutes]);
   // 헤더 타이틀이 1분마다 갱신되도록 tick
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -534,15 +542,15 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
       if (day.isSunday || day.isSaturday) return;
       const t = schedule[day.dateString]?.type;
       if (t === 'holiday' || t === 'vacation') return;
-      if (t === 'half-day') baseTarget += 4;
-      else baseTarget += 8; // normal, family
+      if (t === 'half-day') baseTarget += cfg.halfDayHours;
+      else baseTarget += cfg.workdayHours; // normal, family
     });
 
     const reductions: Record<string, number> = {};
-    if (baseTarget <= 171) return { reductions, target: baseTarget };
+    if (baseTarget <= cfg.monthlyHourCap) return { reductions, target: baseTarget };
 
-    let excess = baseTarget - 171;
-    const PER_DAY_MAX_CUT = 2; // 8 → 6 최소
+    let excess = baseTarget - cfg.monthlyHourCap;
+    const PER_DAY_MAX_CUT = cfg.capMaxCutPerDay;
 
     const dowOf = (dateStr: string) => new Date(dateStr + 'T00:00:00').getDay();
     // 금(5) → 목(4) → 수(3) → 화(2) → 월(1) 순으로 차감 대상 확장
@@ -567,7 +575,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
 
     const totalReduced = Object.values(reductions).reduce((a, b) => a + b, 0);
     return { reductions, target: baseTarget - totalReduced };
-  }, [daysInMonth, schedule]);
+  }, [daysInMonth, schedule, cfg.workdayHours, cfg.halfDayHours, cfg.monthlyHourCap, cfg.capMaxCutPerDay]);
 
   const dailyHours = useMemo(() => {
     const hours: Record<string, number> = {};
@@ -580,32 +588,32 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
         return;
       }
       if (s.type === 'family') {
-        hours[day.dateString] = Math.max(0, 8 - reduction);
+        hours[day.dateString] = Math.max(0, cfg.workdayHours - reduction);
         return;
       }
       if (s.type === 'half-day') {
-        hours[day.dateString] = Math.max(0, 4 - reduction);
+        hours[day.dateString] = Math.max(0, cfg.halfDayHours - reduction);
         return;
       }
       const hasInput = s.start && s.end;
       if (hasInput) {
         let rawHours = calculateHours(s.start, s.end);
         if (rawHours > 0) {
-          if (day.isSunday || day.isSaturday) {
-            hours[day.dateString] = rawHours * 1.5;
+          if ((day.isSunday || day.isSaturday) && cfg.enableWeekendBonus) {
+            hours[day.dateString] = rawHours * cfg.weekendMultiplier;
           } else {
-            const breakTime = rawHours >= 13 ? 1.5 : 1;
+            const breakTime = rawHours >= cfg.longWorkThreshold ? cfg.breakHoursLong : cfg.breakHoursShort;
             hours[day.dateString] = Math.max(0, rawHours - breakTime);
           }
         } else {
           hours[day.dateString] = 0;
         }
       } else {
-        hours[day.dateString] = (day.isSunday || day.isSaturday) ? 0 : Math.max(0, 8 - reduction);
+        hours[day.dateString] = (day.isSunday || day.isSaturday) ? 0 : Math.max(0, cfg.workdayHours - reduction);
       }
     });
     return hours;
-  }, [schedule, daysInMonth, capInfo]);
+  }, [schedule, daysInMonth, capInfo, cfg.workdayHours, cfg.halfDayHours, cfg.weekendMultiplier, cfg.enableWeekendBonus, cfg.breakHoursShort, cfg.breakHoursLong, cfg.longWorkThreshold]);
 
   const totalHours = useMemo(
     () => Object.values(dailyHours).reduce((sum: number, h: number) => sum + h, 0),
@@ -968,6 +976,14 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
         );
       })()}
 
+      {showAdminSettings && (
+        <AdminSettings
+          cfg={cfg}
+          onSave={(next) => { setCfg(next); saveConfig(next); }}
+          onClose={() => setShowAdminSettings(false)}
+        />
+      )}
+
       {showHelp && (
         <div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6 animate-[fadeIn_0.2s_ease-out]"
@@ -1091,16 +1107,26 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                   );
                 })()}
                 {user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() && (
-                  <a
-                    href={ADD_USER_URL}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
-                    title="Google Cloud Console에서 테스트 사용자 Gmail 추가 (관리자 전용)"
-                    aria-label="사용자 추가"
-                  >
-                    <UserPlus className="w-3.5 h-3.5" />
-                  </a>
+                  <>
+                    <button
+                      onClick={() => setShowAdminSettings(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
+                      title="회사 정책 설정 (관리자 전용)"
+                      aria-label="관리자 설정"
+                    >
+                      <Settings className="w-3.5 h-3.5" />
+                    </button>
+                    <a
+                      href={ADD_USER_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
+                      title="Google Cloud Console에서 테스트 사용자 Gmail 추가 (관리자 전용)"
+                      aria-label="사용자 추가"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                    </a>
+                  </>
                 )}
                 <button
                   onClick={() => setShowRecap(true)}
@@ -1279,10 +1305,10 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                           className="block w-full pl-2 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white border appearance-none cursor-pointer"
                         >
                           <option value="normal">일반 근무</option>
-                          {day.isFriday && <option value="family">패밀리데이</option>}
+                          {cfg.enableFamilyDay && new Date(day.dateString + 'T00:00:00').getDay() === cfg.familyDayDow && <option value="family">패밀리데이</option>}
                           <option value="holiday">공휴일</option>
                           <option value="vacation">휴가</option>
-                          {!isWeekend && <option value="half-day">반차</option>}
+                          {cfg.enableHalfDay && !isWeekend && <option value="half-day">반차</option>}
                         </select>
                       </div>
 
@@ -1295,7 +1321,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                             className={`block w-full pl-2 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white border appearance-none cursor-pointer ${!schedule[day.dateString]?.start && type === 'normal' && !isWeekend ? 'hint-empty' : ''}`}
                           >
                             <option value="">선택</option>
-                            {(type === 'half-day' ? HALF_DAY_TIMES : (isWeekend ? WEEKEND_TIMES : START_TIMES)).map(time => (
+                            {(type === 'half-day' ? halfDayTimes : (isWeekend ? weekendTimes : startTimes)).map(time => (
                               <option key={time} value={time}>{time}</option>
                             ))}
                           </select>
@@ -1316,7 +1342,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                               className={`block w-full pl-2 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white border appearance-none cursor-pointer disabled:bg-gray-50 disabled:text-gray-500 ${!schedule[day.dateString]?.end && type === 'normal' && !isWeekend ? 'hint-empty' : ''}`}
                             >
                               <option value="">선택</option>
-                              {(isWeekend ? WEEKEND_TIMES : END_TIMES).map(time => (
+                              {(isWeekend ? weekendTimes : endTimes).map(time => (
                                 <option key={time} value={time}>{time}</option>
                               ))}
                             </select>
