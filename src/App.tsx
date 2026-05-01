@@ -15,6 +15,8 @@ import {
   Copy,
   RotateCcw,
   UserPlus,
+  Crown,
+  Sparkles,
 } from 'lucide-react';
 
 const ADMIN_EMAIL = 'go2god4u@gmail.com';
@@ -69,20 +71,82 @@ export default function App() {
 
   const [nowPromptDismissed, setNowPromptDismissed] = useState(false);
 
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+  type Theme = 'light' | 'dark' | 'pink' | 'pastel';
+  const [theme, setTheme] = useState<Theme>(() => {
     try {
-      const saved = localStorage.getItem('theme');
-      if (saved === 'dark' || saved === 'light') return saved;
+      const saved = localStorage.getItem('theme') as Theme | null;
+      if (saved && ['light', 'dark', 'pink', 'pastel'].includes(saved)) return saved;
     } catch {}
     return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    const html = document.documentElement;
+    html.classList.remove('dark', 'pink', 'pastel');
+    if (theme !== 'light') html.classList.add(theme);
     try { localStorage.setItem('theme', theme); } catch {}
+    const colors: Record<Theme, string> = {
+      light: '#4f46e5',
+      dark: '#0b0b0e',
+      pink: '#ec4899',
+      pastel: '#c4b5fd',
+    };
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b0b0e' : '#4f46e5');
+    if (meta) meta.setAttribute('content', colors[theme]);
   }, [theme]);
-  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'));
+  const themeOrder: Theme[] = ['light', 'dark', 'pink', 'pastel'];
+  const cycleTheme = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % themeOrder.length]);
+
+  // Pull-to-refresh: 스크롤 최상단에서 아래로 끌어 80px 이상 → 새로고침
+  const [ptrDistance, setPtrDistance] = useState(0);
+  const [ptrRefreshing, setPtrRefreshing] = useState(false);
+  const PTR_THRESHOLD = 80;
+  const PTR_MAX = 140;
+  useEffect(() => {
+    let startY: number | null = null;
+    let pulling = false;
+
+    const onStart = (e: TouchEvent) => {
+      if (window.scrollY > 0) return;
+      startY = e.touches[0].clientY;
+      pulling = false;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (startY === null) return;
+      const delta = e.touches[0].clientY - startY;
+      if (delta <= 0) return;
+      if (window.scrollY > 0) { startY = null; return; }
+      pulling = true;
+      const damped = Math.min(PTR_MAX, delta * 0.5);
+      setPtrDistance(damped);
+    };
+    const onEnd = () => {
+      if (pulling && ptrDistance >= PTR_THRESHOLD) {
+        setPtrRefreshing(true);
+        setTimeout(() => window.location.reload(), 250);
+      } else {
+        setPtrDistance(0);
+      }
+      startY = null;
+      pulling = false;
+    };
+
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: true });
+    window.addEventListener('touchend', onEnd, { passive: true });
+    window.addEventListener('touchcancel', onEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('touchcancel', onEnd);
+    };
+  }, [ptrDistance]);
+  const themeMeta: Record<Theme, { icon: typeof Sun; label: string }> = {
+    light: { icon: Sun, label: '라이트' },
+    dark: { icon: Moon, label: '다크' },
+    pink: { icon: Crown, label: '핑크 (공주)' },
+    pastel: { icon: Sparkles, label: '파스텔' },
+  };
 
   // Load month from IndexedDB
   useEffect(() => {
@@ -513,6 +577,17 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-[max(env(safe-area-inset-top),1rem)] pb-8 px-4 sm:px-6 lg:px-8 font-sans">
+      {(ptrDistance > 0 || ptrRefreshing) && (
+        <div
+          className={`ptr-indicator ${ptrRefreshing ? 'refreshing' : ''}`}
+          style={{
+            transform: `translate(-50%, ${ptrRefreshing ? 30 : ptrDistance - 50}px) rotate(${ptrRefreshing ? 0 : ptrDistance * 3}deg)`,
+            opacity: Math.min(1, ptrDistance / 60),
+          }}
+        >
+          <RotateCcw className="w-5 h-5 text-indigo-600" />
+        </div>
+      )}
       {showIntro && (
         <div className="max-w-3xl mx-auto mb-4 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-900 shadow">
           <div className="font-bold mb-1.5 flex items-center gap-2">
@@ -580,14 +655,20 @@ export default function App() {
                     </button>
                   </div>
                 )}
-                <button
-                  onClick={toggleTheme}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
-                  title={theme === 'dark' ? '라이트 모드' : '다크 모드'}
-                  aria-label="테마 전환"
-                >
-                  {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
-                </button>
+                {(() => {
+                  const Icon = themeMeta[theme].icon;
+                  const next = themeOrder[(themeOrder.indexOf(theme) + 1) % themeOrder.length];
+                  return (
+                    <button
+                      onClick={cycleTheme}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
+                      title={`현재: ${themeMeta[theme].label} → 클릭하면 ${themeMeta[next].label}`}
+                      aria-label="테마 전환"
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                    </button>
+                  );
+                })()}
                 <a
                   href={ADD_USER_URL}
                   target="_blank"
