@@ -99,6 +99,20 @@ html.pink, html.pink body { background: linear-gradient(180deg, #fdf2f8, #fff1f2
 html.pink .bg-gradient-to-br.from-indigo-600 {
   background-image: linear-gradient(to bottom right, #f472b6, #fb7185, #e879f9) !important;
 }
+/* Sticky summary bar: 테마별 그라데이션 (헤더와 톤 맞춤) */
+.app-sticky-bg {
+  background-image: linear-gradient(to bottom right, #312e81, #4338ca, #6d28d9);
+}
+html.dark .app-sticky-bg {
+  background-image: linear-gradient(to bottom right, #0f1116, #18181b, #1e1b4b);
+}
+html.pink .app-sticky-bg {
+  background-image: linear-gradient(to bottom right, #831843, #9d174d, #be185d);
+}
+html.pastel .app-sticky-bg {
+  background-image: linear-gradient(to bottom right, #5b21b6, #7c3aed, #a78bfa);
+}
+
 html.pink .bg-gradient-to-br.from-gray-900 {
   background-image: linear-gradient(to bottom right, #831843, #9d174d, #be185d) !important;
 }

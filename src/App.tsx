@@ -32,10 +32,6 @@ const isStandalone = () =>
   (window.matchMedia('(display-mode: standalone)').matches) ||
   (navigator as any).standalone === true;
 
-const haptic = (ms: number) => {
-  try { (navigator as any).vibrate?.(ms); } catch {}
-};
-
 function CountUp({ value, decimals = 0, duration = 500 }: { value: number; decimals?: number; duration?: number }) {
   const [display, setDisplay] = useState(value);
   const prevRef = useRef(value);
@@ -122,8 +118,7 @@ export default function App() {
   }, [theme]);
   const themeOrder: Theme[] = ['light', 'dark', 'pink', 'pastel'];
   const cycleTheme = () => {
-    haptic(10);
-    const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % themeOrder.length]);
+const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % themeOrder.length]);
     if ((document as any).startViewTransition) {
       (document as any).startViewTransition(apply);
     } else {
@@ -342,7 +337,6 @@ export default function App() {
       return { ...prev, [dateString]: newEntry };
     });
     setIsDirty(true);
-    haptic(15);
     setFlashedDate(dateString);
     setTimeout(() => setFlashedDate(p => (p === dateString ? null : p)), 700);
   };
@@ -553,7 +547,6 @@ export default function App() {
 
   const acceptNowPrompt = () => {
     if (!nowPrompt) return;
-    haptic(40);
     handleTimeChange(todayDateString, nowPrompt.kind, nowPrompt.time);
     setNowPromptDismissed(true);
   };
@@ -956,7 +949,7 @@ export default function App() {
           style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1rem)' }}
         >
           <div className="w-full max-w-3xl pointer-events-auto">
-            <div className="relative overflow-hidden flex flex-col bg-gradient-to-br from-gray-900 via-slate-900 to-indigo-950 backdrop-blur-md rounded-2xl p-4 sm:p-6 text-white shadow-2xl border border-indigo-900/40 gap-4">
+            <div className="relative overflow-hidden flex flex-col app-sticky-bg backdrop-blur-md rounded-2xl p-4 sm:p-6 text-white shadow-2xl border border-indigo-900/40 gap-4">
               <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
               <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
             <div className="relative flex flex-col sm:flex-row items-center justify-between gap-4">
