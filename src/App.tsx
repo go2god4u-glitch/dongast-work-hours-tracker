@@ -379,8 +379,9 @@ export default function App() {
     }
   };
 
-  // 월 171시간 법정 상한: 평일 기본근무가 누적해서 171시간을 넘으면
-  // 마지막 주 금요일부터 역순으로 차감 (휴일/휴가 금요일은 건너뜀)
+  // 월 171시간 법정 상한: 일반 근무 금요일은 최소 6시간 유지(=금요일당 최대 2시간만 차감).
+  // 한 금요일로 부족하면 그 전 주 금요일로 분산 차감.
+  // 패밀리데이/공휴일/휴가/반차 금요일은 차감 대상 제외.
   const capInfo = useMemo(() => {
     let baseTarget = 0;
     daysInMonth.forEach(day => {
@@ -395,23 +396,25 @@ export default function App() {
     if (baseTarget <= 171) return { reductions, target: baseTarget };
 
     let excess = baseTarget - 171;
+    const PER_FRIDAY_MAX_CUT = 2; // 8 → 6 최소
+
     const eligibleFridays = daysInMonth
       .filter(d => d.isFriday)
       .reverse() // 마지막 금요일부터
       .filter(d => {
         const t = schedule[d.dateString]?.type;
-        return t !== 'holiday' && t !== 'vacation';
+        return !t || t === 'normal'; // 일반 근무 금요일만 차감 대상
       });
 
     for (const f of eligibleFridays) {
       if (excess <= 0) break;
-      const t = schedule[f.dateString]?.type;
-      const cap = t === 'half-day' ? 4 : 8;
-      const cut = Math.min(excess, cap);
+      const cut = Math.min(excess, PER_FRIDAY_MAX_CUT);
       reductions[f.dateString] = cut;
       excess -= cut;
     }
-    return { reductions, target: Math.max(171, baseTarget - (baseTarget - 171 - excess)) };
+
+    const totalReduced = Object.values(reductions).reduce((a, b) => a + b, 0);
+    return { reductions, target: baseTarget - totalReduced };
   }, [daysInMonth, schedule]);
 
   const dailyHours = useMemo(() => {
@@ -462,24 +465,7 @@ export default function App() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   }, []);
 
-  const targetMonthlyHours = useMemo(() => {
-    let target = 0;
-    daysInMonth.forEach(day => {
-      if (!day.isSunday && !day.isSaturday) {
-        const s = schedule[day.dateString];
-        if (s?.type === 'holiday' || s?.type === 'vacation') {
-          // skip
-        } else if (s?.type === 'family') {
-          target += 8;
-        } else if (s?.type === 'half-day') {
-          target += 4;
-        } else {
-          target += 8;
-        }
-      }
-    });
-    return Math.min(target, 171);
-  }, [daysInMonth, schedule]);
+  const targetMonthlyHours = capInfo.target;
 
   const hoursDifference = totalHours - targetMonthlyHours;
 
