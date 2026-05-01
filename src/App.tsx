@@ -278,8 +278,9 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
   // Drive에 보낼 미저장 변경분이 있는지 추적 (UI 재렌더와 무관)
   const driveDirtyRef = useRef(false);
 
-  // 조용한 백그라운드 업로드 — UI 상태나 schedule을 건드리지 않음.
-  // 성공해도 사용자에게 표시 안 함 (헤더 뱃지만 잠깐 sync 표시).
+  // 조용한 백그라운드 동기화 — Drive와 일자별 modifiedAt 머지 후 업로드.
+  // 다중 기기 동시 편집 보호: 두 기기에서 다른 날을 편집해도 둘 다 보존.
+  // schedule 갱신은 실제 변경이 있을 때만 (불필요한 재렌더 방지).
   const silentPush = useCallback(async () => {
     if (!drive.isEnabled() || drive.getStatus() !== 'signed-in') return;
     if (!driveDirtyRef.current) return;
@@ -287,15 +288,31 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     setSyncState('syncing');
     try {
       const local = await exportAll();
-      await drive.uploadAll(local);
+      const merged = await drive.syncAll(local);
+      await importAll(merged);
+      // 현재 보고 있는 월에 실제 변화가 있을 때만 setSchedule
+      const currentMerged = merged[selectedMonth] || {};
+      setSchedule(prev => {
+        const prevKeys = Object.keys(prev);
+        const newKeys = Object.keys(currentMerged);
+        if (prevKeys.length !== newKeys.length) return currentMerged;
+        for (const k of newKeys) {
+          const a = prev[k];
+          const b = currentMerged[k];
+          if (!a || a.start !== b.start || a.end !== b.end || a.type !== b.type || a.m !== b.m) {
+            return currentMerged;
+          }
+        }
+        return prev; // 변화 없음 — 재렌더 회피
+      });
       setSyncState('synced');
       setTimeout(() => setSyncState('idle'), 1500);
     } catch (e) {
-      console.warn('Background drive push failed:', e);
+      console.warn('Background drive sync failed:', e);
       driveDirtyRef.current = true; // 다음 주기 재시도
       setSyncState('error');
     }
-  }, []);
+  }, [selectedMonth]);
 
   // 초기 pull/sync용 — 사용자가 명시적으로 동기화 요청 (signIn 직후 등)
   const pushToDrive = useCallback(async () => {
