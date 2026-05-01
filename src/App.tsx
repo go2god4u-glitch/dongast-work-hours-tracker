@@ -96,6 +96,12 @@ export default function App() {
 
   const [nowPromptDismissed, setNowPromptDismissed] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // 헤더 타이틀이 1분마다 갱신되도록 tick
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 60000);
+    return () => clearInterval(id);
+  }, []);
 
   type Theme = 'light' | 'dark' | 'pink' | 'pastel';
   const [theme, setTheme] = useState<Theme>(() => {
@@ -827,10 +833,21 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
               </div>
               <div className="min-w-0">
                 <h1 className="text-xl md:text-2xl font-bold truncate">{(() => {
-                  const h = new Date().getHours();
-                  if (h < 12) return '오늘도 출근! 💪🏻';
-                  if (h < 18) return '수고했어요! 🤗';
-                  return '퇴근 후 💕';
+                  const now = new Date();
+                  const today = schedule[todayDateString];
+                  const endStr = today?.end;
+                  if (endStr) {
+                    const [eh, em] = endStr.split(':').map(Number);
+                    const endDate = new Date(now);
+                    endDate.setHours(eh, em, 0, 0);
+                    if (now >= endDate) return '퇴근 후 💕';
+                    const totalMin = Math.ceil((endDate.getTime() - now.getTime()) / 60000);
+                    const h = Math.floor(totalMin / 60);
+                    const m = totalMin % 60;
+                    const remain = h > 0 && m > 0 ? `${h}시간 ${m}분` : h > 0 ? `${h}시간` : `${m}분`;
+                    return `퇴근까지 ${remain} 남았어요 🤗`;
+                  }
+                  return '오늘도 출근! 💪🏻';
                 })()}</h1>
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   {renderSyncBadge()}
