@@ -17,6 +17,8 @@ import {
   UserPlus,
   Crown,
   Sparkles,
+  HelpCircle,
+  X,
 } from 'lucide-react';
 
 const ADMIN_EMAIL = 'go2god4u@gmail.com';
@@ -93,6 +95,7 @@ export default function App() {
   };
 
   const [nowPromptDismissed, setNowPromptDismissed] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
   type Theme = 'light' | 'dark' | 'pink' | 'pastel';
   const [theme, setTheme] = useState<Theme>(() => {
@@ -129,48 +132,84 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
   // Pull-to-refresh: 스크롤 최상단에서 아래로 끌어 80px 이상 → 새로고침
   const [ptrDistance, setPtrDistance] = useState(0);
   const [ptrRefreshing, setPtrRefreshing] = useState(false);
-  const PTR_THRESHOLD = 80;
+  const PTR_THRESHOLD = 70;
   const PTR_MAX = 140;
+  const ptrDistRef = useRef(0);
+  const setDist = useCallback((d: number) => {
+    ptrDistRef.current = d;
+    setPtrDistance(d);
+  }, []);
   useEffect(() => {
     let startY: number | null = null;
-    let pulling = false;
+    let lastY = 0;
+
+    const getScrollTop = () =>
+      window.scrollY ||
+      document.documentElement.scrollTop ||
+      document.body.scrollTop ||
+      0;
 
     const onStart = (e: TouchEvent) => {
-      if (window.scrollY > 0) return;
-      startY = e.touches[0].clientY;
-      pulling = false;
-    };
-    const onMove = (e: TouchEvent) => {
-      if (startY === null) return;
-      const delta = e.touches[0].clientY - startY;
-      if (delta <= 0) return;
-      if (window.scrollY > 0) { startY = null; return; }
-      pulling = true;
-      const damped = Math.min(PTR_MAX, delta * 0.5);
-      setPtrDistance(damped);
-    };
-    const onEnd = () => {
-      if (pulling && ptrDistance >= PTR_THRESHOLD) {
-        setPtrRefreshing(true);
-        setTimeout(() => window.location.reload(), 250);
-      } else {
-        setPtrDistance(0);
-      }
-      startY = null;
-      pulling = false;
+      if (e.touches.length !== 1) { startY = null; return; }
+      // 시작 시점이 최상단이 아니면 일단 보류 — 나중에 최상단 도달 시 재설정
+      startY = getScrollTop() <= 0 ? e.touches[0].clientY : null;
+      lastY = e.touches[0].clientY;
     };
 
-    window.addEventListener('touchstart', onStart, { passive: true });
-    window.addEventListener('touchmove', onMove, { passive: true });
-    window.addEventListener('touchend', onEnd, { passive: true });
-    window.addEventListener('touchcancel', onEnd, { passive: true });
-    return () => {
-      window.removeEventListener('touchstart', onStart);
-      window.removeEventListener('touchmove', onMove);
-      window.removeEventListener('touchend', onEnd);
-      window.removeEventListener('touchcancel', onEnd);
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      const y = e.touches[0].clientY;
+      lastY = y;
+      const top = getScrollTop();
+
+      if (top > 0) {
+        // 최상단이 아니면 추적 안 함
+        if (ptrDistRef.current !== 0) setDist(0);
+        startY = null;
+        return;
+      }
+
+      if (startY === null) {
+        // 방금 막 최상단에 도달 → 여기서부터 시작 기준
+        startY = y;
+        return;
+      }
+
+      const delta = y - startY;
+      if (delta <= 0) {
+        // 위로 올라가는 동작 → start 재설정
+        startY = y;
+        if (ptrDistRef.current !== 0) setDist(0);
+        return;
+      }
+
+      const damped = Math.min(PTR_MAX, delta * 0.55);
+      setDist(damped);
     };
-  }, [ptrDistance]);
+
+    const onEnd = () => {
+      if (ptrDistRef.current >= PTR_THRESHOLD) {
+        setPtrRefreshing(true);
+        // 부드럽게 인디케이터 표시 후 새로고침
+        setTimeout(() => window.location.reload(), 350);
+      } else {
+        setDist(0);
+      }
+      startY = null;
+      lastY = 0;
+    };
+
+    document.addEventListener('touchstart', onStart, { passive: true });
+    document.addEventListener('touchmove', onMove, { passive: true });
+    document.addEventListener('touchend', onEnd, { passive: true });
+    document.addEventListener('touchcancel', onEnd, { passive: true });
+    return () => {
+      document.removeEventListener('touchstart', onStart);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('touchcancel', onEnd);
+    };
+  }, [setDist]);
   const themeMeta: Record<Theme, { icon: typeof Sun; label: string }> = {
     light: { icon: Sun, label: '라이트' },
     dark: { icon: Moon, label: '다크' },
@@ -621,6 +660,143 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
           <RotateCcw className="w-5 h-5 text-indigo-600" />
         </div>
       )}
+
+      {showHelp && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6 animate-[fadeIn_0.2s_ease-out]"
+          onClick={() => setShowHelp(false)}
+        >
+          <div
+            className="help-modal w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            <div className="sticky top-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-500 text-white px-6 py-4 flex items-center justify-between rounded-t-3xl z-10">
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-5 h-5" />
+                <h2 className="text-lg font-bold">사용 설명서</h2>
+              </div>
+              <button onClick={() => setShowHelp(false)} className="p-1.5 hover:bg-white/20 rounded-lg" aria-label="닫기">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-6 text-sm leading-relaxed text-gray-700">
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">1. 기본 입력</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>각 날짜별로 <b>근무 유형 / 출근 시간 / 퇴근 시간</b>을 선택</li>
+                  <li>시간은 <b>30분 단위</b>로만 선택 가능 (회사 정책)</li>
+                  <li>변경 즉시 자동 저장 — "모든 변경사항 저장됨" 메시지로 확인</li>
+                  <li>오늘 카드에 <b>인디고 강조 + "오늘" 배지</b>가 표시됨, 페이지 진입 시 오늘로 자동 스크롤</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">2. 근무 유형 5가지</h3>
+                <div className="space-y-1.5">
+                  <div><b>일반 근무</b> — 평일 기본. 주중 8시간, 주말 시 1.5배</div>
+                  <div><b>패밀리데이</b> — 금요일 한정 옵션. 8시간 자동 인정</div>
+                  <div><b>공휴일</b> — 0시간. 한국 공휴일은 자동 마킹</div>
+                  <div><b>휴가</b> — 0시간. 목표 시간에서도 제외</div>
+                  <div><b>반차</b> — 4시간 (평일 한정)</div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">3. 자동 계산 규칙</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>주중: 입력 시간에서 <b>휴게시간 1시간 차감</b> (13시간 이상 근무 시 1.5시간)</li>
+                  <li>주말 근무: 차감 없이 <b>1.5배</b> 가산</li>
+                  <li><b>월 171시간 법정 상한</b>: 평일×8시간이 171시간을 넘으면 마지막 주 금요일부터 거꾸로 자동 차감 (한 날 최대 2시간, 최소 6시간 보장 → 부족 시 목/수/화/월로 cascade)</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">4. 빠른 입력 버튼</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>평일 일반 근무 카드 우상단의 <b>📋 어제와 동일</b> / <b>↺ 지난주 같은 요일과 동일</b> 버튼</li>
+                  <li>클릭 시 출처 데이터를 미리 보여주고 확인 후 적용</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">5. "지금 출근 / 지금 퇴근" 자동 안내</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>평일 출근 시간대(<b>07:00 ~ 10:59</b>)에 앱 진입 + 오늘 출근 미입력 → "지금 출근" 안내 배너</li>
+                  <li>평일 퇴근 시간대(<b>16:00 ~ 22:59</b>)에 진입 + 오늘 퇴근 미입력 → "지금 퇴근" 안내 배너</li>
+                  <li>현재 시각을 30분 단위로 반올림한 값으로 한 번에 기록</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">6. 데이터 저장</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li><b>로컬 (IndexedDB)</b>: 항상 자동 저장. 이 브라우저에서만 접근</li>
+                  <li><b>Google Drive 동기화</b>: 헤더의 "Google 로그인" 클릭 → 본인 Drive의 앱 전용 폴더에 자동 백업. 다른 기기에서 같은 계정 로그인 시 자동 다운로드</li>
+                  <li>같이 쓰는 사용자는 각자 본인 계정 데이터만 보관 (서로 격리)</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">7. 색상 코드</h3>
+                <div className="space-y-1.5">
+                  <div><span className="inline-block w-2 h-2 rounded-full bg-indigo-400 mr-2 align-middle" />평일 도트 (월·화·수·목·금 색상 다양)</div>
+                  <div><span className="inline-block w-2 h-2 rounded-full bg-red-400 mr-2 align-middle" />주말/공휴일</div>
+                  <div><span className="inline-block w-2 h-2 rounded-full bg-pink-400 mr-2 align-middle" />휴가/패밀리데이/반차</div>
+                  <div className="pt-2"><b>초과/부족 색</b>: 부족 1~3 옅은 빨강 → 3~5 중간 → 5~8 진함 → 8 초과 가장 진한 빨강 + 깜빡임</div>
+                </div>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">8. 테마 (☀️/🌙/👑/✨)</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>헤더 우측 토글 버튼 — 누를 때마다 <b>라이트 → 다크 → 핑크(공주) → 파스텔</b> 순환</li>
+                  <li>선택은 자동 저장되어 다음 방문에도 유지</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">9. iPhone 홈 화면 추가 (PWA)</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Safari로 사이트 접속 → 하단 공유 버튼 → <b>"홈 화면에 추가"</b></li>
+                  <li>홈 화면 아이콘으로 실행 시 주소창 없이 standalone으로 동작</li>
+                  <li>오프라인에서도 캐시된 화면 열림</li>
+                  <li>iOS Safari가 7일 미사용 시 IndexedDB를 자동 삭제할 수 있으므로 <b>홈 화면 추가 + Google 로그인 권장</b></li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">10. 새로고침 (Pull-to-refresh)</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>페이지 최상단에서 손가락으로 <b>아래로 70px 이상</b> 끌고 놓으면 자동 새로고침</li>
+                  <li>인디케이터(↺)가 따라 내려오며 회전</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">11. 관리자 — 사용자 추가</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>헤더의 <b>👤➕ 버튼</b> 클릭 → Google Cloud Console "테스트 사용자" 페이지 열림</li>
+                  <li>같이 쓸 직원의 Gmail을 추가 (최대 100명, 무료)</li>
+                  <li>관리자(앱 소유자) 계정으로 로그인된 경우만 권한 있음 — 다른 사용자가 눌러도 Google이 자동 차단</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-base font-bold text-gray-900 mb-2">12. 빈 입력 시각 신호</h3>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>일반 근무 평일에서 출근/퇴근 미입력 시 셀렉트에 <b>옅은 노랑 outline</b> 표시</li>
+                  <li>실수로 빠뜨린 날 한눈에 식별</li>
+                </ul>
+              </section>
+
+              <section className="text-xs text-gray-500 pt-3 border-t border-gray-100">
+                문의 / 버그: <a href="https://github.com/go2god4u-glitch/dongast-work-hours-tracker/issues" className="underline" target="_blank" rel="noopener noreferrer">GitHub Issues</a>
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
       {showIntro && (
         <div className="max-w-3xl mx-auto mb-4 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-900 shadow">
           <div className="font-bold mb-1.5 flex items-center gap-2">
@@ -712,6 +888,14 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                 >
                   <UserPlus className="w-3.5 h-3.5" />
                 </a>
+                <button
+                  onClick={() => setShowHelp(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
+                  title="사용 설명서"
+                  aria-label="사용 설명서"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           </div>

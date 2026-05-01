@@ -284,6 +284,17 @@ html.dark .hint-empty { box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.25); }
 }
 .animate-twinkle { animation: twinkle 2.4s ease-in-out infinite; }
 
+/* Help modal */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.help-modal { background: #ffffff; color: #374151; }
+.help-modal h3 { color: #111827; }
+html.dark .help-modal { background: #18181b; color: #d4d4d8; }
+html.dark .help-modal h3 { color: #fafafa; }
+html.pink .help-modal { background: #fff1f2; color: #831843; }
+html.pink .help-modal h3 { color: #831843; }
+html.pastel .help-modal { background: #faf5ff; color: #4c1d95; }
+html.pastel .help-modal h3 { color: #4c1d95; }
+
 /* Pull-to-refresh indicator */
 .ptr-indicator {
   position: fixed;
