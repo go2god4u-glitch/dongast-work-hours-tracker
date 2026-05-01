@@ -1,0 +1,5 @@
+{
+  "name": "Work Hours Tracker",
+  "description": "A web page to input and track weekly work hours from Monday to Saturday.",
+  "requestFramePermissions": []
+}
