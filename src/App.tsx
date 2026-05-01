@@ -379,9 +379,9 @@ export default function App() {
     }
   };
 
-  // 월 171시간 법정 상한: 일반 근무 금요일은 최소 6시간 유지(=금요일당 최대 2시간만 차감).
-  // 한 금요일로 부족하면 그 전 주 금요일로 분산 차감.
-  // 패밀리데이/공휴일/휴가/반차 금요일은 차감 대상 제외.
+  // 월 171시간 법정 상한: 일반 근무일은 최소 6시간 유지(=하루당 최대 2시간만 차감).
+  // 우선순위: 마지막 주 금요일 → 거슬러 올라가며 모든 금요일 → 목요일 → 수요일 → 화요일 → 월요일.
+  // 패밀리데이/공휴일/휴가/반차는 차감 대상 제외.
   const capInfo = useMemo(() => {
     let baseTarget = 0;
     daysInMonth.forEach(day => {
@@ -396,21 +396,27 @@ export default function App() {
     if (baseTarget <= 171) return { reductions, target: baseTarget };
 
     let excess = baseTarget - 171;
-    const PER_FRIDAY_MAX_CUT = 2; // 8 → 6 최소
+    const PER_DAY_MAX_CUT = 2; // 8 → 6 최소
 
-    const eligibleFridays = daysInMonth
-      .filter(d => d.isFriday)
-      .reverse() // 마지막 금요일부터
-      .filter(d => {
-        const t = schedule[d.dateString]?.type;
-        return !t || t === 'normal'; // 일반 근무 금요일만 차감 대상
-      });
+    const dowOf = (dateStr: string) => new Date(dateStr + 'T00:00:00').getDay();
+    // 금(5) → 목(4) → 수(3) → 화(2) → 월(1) 순으로 차감 대상 확장
+    const dayOrder = [5, 4, 3, 2, 1];
 
-    for (const f of eligibleFridays) {
+    for (const dow of dayOrder) {
       if (excess <= 0) break;
-      const cut = Math.min(excess, PER_FRIDAY_MAX_CUT);
-      reductions[f.dateString] = cut;
-      excess -= cut;
+      const candidates = daysInMonth
+        .filter(d => dowOf(d.dateString) === dow)
+        .reverse() // 같은 요일 안에서는 마지막부터
+        .filter(d => {
+          const t = schedule[d.dateString]?.type;
+          return !t || t === 'normal'; // 일반 근무일만
+        });
+      for (const day of candidates) {
+        if (excess <= 0) break;
+        const cut = Math.min(excess, PER_DAY_MAX_CUT);
+        reductions[day.dateString] = cut;
+        excess -= cut;
+      }
     }
 
     const totalReduced = Object.values(reductions).reduce((a, b) => a + b, 0);
