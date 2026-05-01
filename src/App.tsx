@@ -455,22 +455,24 @@ export default function App() {
   };
 
   /**
-   * 부족 시간에 따라 색상이 점점 더 빨개지도록 HSL 보간.
-   * - 0시간 부족: 옅은 회색 톤
-   * - 12시간 이상 부족: 진한 빨강
-   * - 초과(diff >= 0): 에메랄드 그대로 유지
+   * 부족 시간 단계별 색상 (점점 진한 빨강).
+   *  - 1 ≤ 부족 ≤ 3: 단계 1 (옅은 빨강)
+   *  - 3 < 부족 ≤ 5: 단계 2 (중간 빨강)
+   *  - 5 < 부족 ≤ 8: 단계 3 (진한 빨강)
+   *  - 8 초과:        단계 4 (가장 진한 빨강 + pulse)
+   *  - 0~1 미만:      차감 무시 (회색)
+   *  - 초과(+):       에메랄드
    */
+  const deficit = -hoursDifference; // 양수면 부족 시간
   const diffStyle = useMemo<React.CSSProperties>(() => {
-    if (hoursDifference >= 0) return {};
-    const intensity = Math.min(1, Math.abs(hoursDifference) / 12);
-    const sat = 55 + 40 * intensity; // 55 → 95
-    const lig = 65 - 18 * intensity; // 65 → 47
-    return { color: `hsl(0, ${sat}%, ${lig}%)` };
-  }, [hoursDifference]);
-  const diffWeight =
-    hoursDifference < -8 ? 'font-extrabold' :
-    hoursDifference < -4 ? 'font-bold' : 'font-bold';
-  const diffPulse = hoursDifference < -10 ? 'animate-pulse' : '';
+    if (deficit < 1) return {};
+    if (deficit <= 3) return { color: 'hsl(0, 60%, 70%)' };
+    if (deficit <= 5) return { color: 'hsl(0, 72%, 60%)' };
+    if (deficit <= 8) return { color: 'hsl(0, 82%, 52%)' };
+    return { color: 'hsl(0, 92%, 45%)' };
+  }, [deficit]);
+  const diffWeight = deficit > 8 ? 'font-extrabold' : 'font-bold';
+  const diffPulse = deficit > 8 ? 'animate-pulse' : '';
 
   const renderSyncBadge = () => {
     if (!drive.isEnabled()) {
