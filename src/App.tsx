@@ -18,6 +18,11 @@ import { KOREAN_HOLIDAYS, START_TIMES, END_TIMES, WEEKEND_TIMES, HALF_DAY_TIMES 
 import { loadMonth, saveMonth, exportAll, importAll, MonthSchedule } from './storage';
 import * as drive from './googleDrive';
 
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+const isStandalone = () =>
+  (window.matchMedia('(display-mode: standalone)').matches) ||
+  (navigator as any).standalone === true;
+
 const calculateHours = (start: string, end: string) => {
   if (!start || !end) return 0;
   const [startH, startM] = start.split(':').map(Number);
@@ -43,6 +48,17 @@ export default function App() {
   const [syncState, setSyncState] = useState<SyncState>(drive.isEnabled() ? 'idle' : 'offline');
   const todayRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showIntro, setShowIntro] = useState(() => {
+    try {
+      return localStorage.getItem('intro_dismissed') !== '1' && isIOS() && !isStandalone();
+    } catch {
+      return false;
+    }
+  });
+  const dismissIntro = () => {
+    try { localStorage.setItem('intro_dismissed', '1'); } catch {}
+    setShowIntro(false);
+  };
 
   // Load month from IndexedDB
   useEffect(() => {
@@ -195,9 +211,15 @@ export default function App() {
       setUser(u);
       setDriveStatus(drive.getStatus());
       await pullFromDrive();
-    } catch (e) {
+    } catch (e: any) {
       console.error('Sign-in failed', e);
       setSyncState('error');
+      const msg = String(e?.message || e);
+      if (msg.includes('popup') || msg.includes('blocked')) {
+        alert('팝업이 차단되었습니다. 브라우저 설정에서 이 사이트의 팝업을 허용한 뒤 다시 시도해 주세요.');
+      } else if (msg.includes('Client ID')) {
+        alert('Google Drive 동기화가 아직 설정되지 않았습니다. (.env.local의 VITE_GOOGLE_CLIENT_ID 필요)');
+      }
     }
   };
 
@@ -345,8 +367,26 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8 font-sans">
-      <div className="max-w-3xl mx-auto relative pb-24">
+    <div className="min-h-screen bg-gray-50 pt-[max(env(safe-area-inset-top),1rem)] pb-8 px-4 sm:px-6 lg:px-8 font-sans">
+      {showIntro && (
+        <div className="max-w-3xl mx-auto mb-4 bg-amber-50 border border-amber-200 rounded-2xl p-4 text-sm text-amber-900 shadow">
+          <div className="font-bold mb-1.5 flex items-center gap-2">
+            <AlertCircle className="w-4 h-4" />
+            iOS 사용자 안내
+          </div>
+          <ul className="list-disc pl-5 space-y-1 text-amber-800">
+            <li><b>홈 화면에 추가</b>를 권장합니다 — Safari 공유 버튼 → "홈 화면에 추가". 그래야 데이터가 자동 삭제되지 않습니다.</li>
+            <li>여러 기기 사이 동기화·영구 백업이 필요하면 우측 상단 <b>Google 로그인</b>을 켜주세요.</li>
+          </ul>
+          <button
+            onClick={dismissIntro}
+            className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg"
+          >
+            확인
+          </button>
+        </div>
+      )}
+      <div className="max-w-3xl mx-auto relative pb-32">
         <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
           {/* Header */}
           <div className="bg-indigo-600 px-4 py-6 md:px-8 md:py-10 text-white flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-6">
@@ -574,7 +614,10 @@ export default function App() {
         </div>
 
         {/* Sticky Summary */}
-        <div className="fixed bottom-0 left-0 right-0 p-4 sm:p-6 pointer-events-none flex justify-center z-10">
+        <div
+          className="fixed bottom-0 left-0 right-0 p-4 sm:p-6 pointer-events-none flex justify-center z-10"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1rem)' }}
+        >
           <div className="w-full max-w-3xl pointer-events-auto">
             <div className="flex flex-col sm:flex-row items-center justify-between bg-gray-900/95 backdrop-blur-md rounded-2xl p-4 sm:p-6 text-white shadow-2xl border border-gray-800 gap-4">
               <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">

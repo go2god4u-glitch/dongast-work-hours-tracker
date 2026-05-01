@@ -6,6 +6,23 @@
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
-body {
+html, body {
   @apply bg-[#f5f5f5] text-[#1a1a1a] font-sans antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+
+/* iOS safe-area helpers */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* iOS Safari에서 form 자동 줌 방지: 16px 이상 */
+@supports (-webkit-touch-callout: none) {
+  select, input[type="month"] {
+    font-size: 16px !important;
+  }
 }
