@@ -1386,6 +1386,11 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
           </div>
         </div>
 
+        {/* Version footer — 항상 표시, 매 push마다 자동 갱신 */}
+        <div className="mt-6 text-center text-[11px] text-gray-400 num">
+          v{__APP_BUILD_DATE__} · <span className="font-mono">{__APP_VERSION__}</span>
+        </div>
+
         {/* Sticky Summary */}
         <div
           className="fixed bottom-0 left-0 right-0 p-4 sm:p-6 pointer-events-none flex justify-center z-10"
