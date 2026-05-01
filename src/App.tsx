@@ -1090,16 +1090,18 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                     </button>
                   );
                 })()}
-                <a
-                  href={ADD_USER_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
-                  title="Google Cloud Console에서 테스트 사용자 Gmail 추가 (관리자만 권한 있음)"
-                  aria-label="사용자 추가"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                </a>
+                {user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase() && (
+                  <a
+                    href={ADD_USER_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
+                    title="Google Cloud Console에서 테스트 사용자 Gmail 추가 (관리자 전용)"
+                    aria-label="사용자 추가"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" />
+                  </a>
+                )}
                 <button
                   onClick={() => setShowRecap(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
