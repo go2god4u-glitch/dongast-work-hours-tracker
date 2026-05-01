@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Clock,
   Calendar,
@@ -7,10 +7,16 @@ import {
   AlertCircle,
   Download,
   Upload,
+  Cloud,
+  CloudOff,
+  LogIn,
+  LogOut,
+  User as UserIcon,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { KOREAN_HOLIDAYS, START_TIMES, END_TIMES, WEEKEND_TIMES, HALF_DAY_TIMES } from './constants';
 import { loadMonth, saveMonth, exportAll, importAll, MonthSchedule } from './storage';
+import * as drive from './googleDrive';
 
 const calculateHours = (start: string, end: string) => {
   if (!start || !end) return 0;
@@ -19,6 +25,8 @@ const calculateHours = (start: string, end: string) => {
   const diff = ((endH * 60 + endM) - (startH * 60 + startM)) / 60;
   return diff > 0 ? diff : 0;
 };
+
+type SyncState = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
 
 export default function App() {
   const [selectedMonth, setSelectedMonth] = useState(() => {
@@ -30,6 +38,9 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [isDirty, setIsDirty] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [driveStatus, setDriveStatus] = useState<drive.DriveStatus>(drive.getStatus());
+  const [user, setUser] = useState<drive.UserInfo | null>(drive.getUser());
+  const [syncState, setSyncState] = useState<SyncState>(drive.isEnabled() ? 'idle' : 'offline');
   const todayRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -47,6 +58,40 @@ export default function App() {
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
+  // After sign-in, pull from Drive and merge into IndexedDB
+  const pullFromDrive = useCallback(async () => {
+    if (!drive.isEnabled() || drive.getStatus() !== 'signed-in') return;
+    setSyncState('syncing');
+    try {
+      const remote = await drive.downloadAll();
+      if (remote) {
+        await importAll(remote);
+        // refresh current month view
+        const fresh = await loadMonth(selectedMonth);
+        setSchedule(fresh);
+      }
+      setSyncState('synced');
+      setTimeout(() => setSyncState('idle'), 1500);
+    } catch (e) {
+      console.error('Drive pull failed', e);
+      setSyncState('error');
+    }
+  }, [selectedMonth]);
+
+  const pushToDrive = useCallback(async () => {
+    if (!drive.isEnabled() || drive.getStatus() !== 'signed-in') return;
+    setSyncState('syncing');
+    try {
+      const all = await exportAll();
+      await drive.uploadAll(all);
+      setSyncState('synced');
+      setTimeout(() => setSyncState('idle'), 1500);
+    } catch (e) {
+      console.error('Drive push failed', e);
+      setSyncState('error');
+    }
+  }, []);
+
   // Scroll to today
   useEffect(() => {
     if (!isDataLoaded) return;
@@ -56,14 +101,30 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [isDataLoaded, selectedMonth]);
 
-  // Auto-save (debounced)
+  // Auto-save: IndexedDB immediately, Drive debounced
   useEffect(() => {
     if (!isDirty || !isDataLoaded) return;
-    const timer = setTimeout(() => {
-      saveLocal();
+    const timer = setTimeout(async () => {
+      setIsSaving(true);
+      setSaveStatus('idle');
+      try {
+        await saveMonth(selectedMonth, schedule);
+        setSaveStatus('success');
+        setIsDirty(false);
+        setTimeout(() => setSaveStatus('idle'), 2000);
+        // Drive 업로드 (best-effort, 실패해도 로컬엔 저장됨)
+        if (drive.isEnabled() && drive.getStatus() === 'signed-in') {
+          pushToDrive();
+        }
+      } catch (error) {
+        console.error('Save failed:', error);
+        setSaveStatus('error');
+      } finally {
+        setIsSaving(false);
+      }
     }, 1000);
     return () => clearTimeout(timer);
-  }, [schedule, isDirty, isDataLoaded]);
+  }, [schedule, isDirty, isDataLoaded, selectedMonth, pushToDrive]);
 
   const daysInMonth = useMemo(() => {
     const [year, month] = selectedMonth.split('-').map(Number);
@@ -128,20 +189,23 @@ export default function App() {
     setIsDirty(true);
   };
 
-  const saveLocal = async () => {
-    setIsSaving(true);
-    setSaveStatus('idle');
+  const handleSignIn = async () => {
     try {
-      await saveMonth(selectedMonth, schedule);
-      setSaveStatus('success');
-      setIsDirty(false);
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch (error) {
-      console.error('Save failed:', error);
-      setSaveStatus('error');
-    } finally {
-      setIsSaving(false);
+      const u = await drive.signIn();
+      setUser(u);
+      setDriveStatus(drive.getStatus());
+      await pullFromDrive();
+    } catch (e) {
+      console.error('Sign-in failed', e);
+      setSyncState('error');
     }
+  };
+
+  const handleSignOut = () => {
+    drive.signOut();
+    setUser(null);
+    setDriveStatus(drive.getStatus());
+    setSyncState('idle');
   };
 
   const handleExport = async () => {
@@ -164,6 +228,9 @@ export default function App() {
       await importAll(parsed);
       const fresh = await loadMonth(selectedMonth);
       setSchedule(fresh);
+      if (drive.isEnabled() && drive.getStatus() === 'signed-in') {
+        pushToDrive();
+      }
       alert('백업 파일을 불러왔습니다.');
     } catch (err) {
       alert('파일을 읽지 못했습니다.');
@@ -240,6 +307,43 @@ export default function App() {
 
   const hoursDifference = totalHours - targetMonthlyHours;
 
+  const renderSyncBadge = () => {
+    if (!drive.isEnabled()) {
+      return (
+        <span className="flex items-center gap-1 text-xs text-indigo-200">
+          <CloudOff className="w-3.5 h-3.5" /> 로컬 전용
+        </span>
+      );
+    }
+    if (driveStatus === 'signed-out') {
+      return (
+        <span className="flex items-center gap-1 text-xs text-amber-200">
+          <CloudOff className="w-3.5 h-3.5" /> Drive 미연결
+        </span>
+      );
+    }
+    if (syncState === 'syncing') {
+      return (
+        <span className="flex items-center gap-1 text-xs text-indigo-100">
+          <div className="w-3 h-3 border-2 border-indigo-200 border-t-white rounded-full animate-spin" />
+          동기화 중
+        </span>
+      );
+    }
+    if (syncState === 'error') {
+      return (
+        <span className="flex items-center gap-1 text-xs text-rose-200">
+          <AlertCircle className="w-3.5 h-3.5" /> 동기화 실패
+        </span>
+      );
+    }
+    return (
+      <span className="flex items-center gap-1 text-xs text-emerald-200">
+        <Cloud className="w-3.5 h-3.5" /> Drive 동기화 중
+      </span>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8 font-sans">
       <div className="max-w-3xl mx-auto relative pb-24">
@@ -252,12 +356,12 @@ export default function App() {
               </div>
               <div className="min-w-0">
                 <h1 className="text-xl md:text-2xl font-bold truncate">월간 근무 시간 입력</h1>
-                <p className="text-indigo-100 mt-1 text-xs md:text-sm">
-                  데이터는 이 브라우저에만 저장됩니다. <br className="md:hidden" />
-                  <span className="bg-indigo-800/50 px-2 py-0.5 rounded text-[10px] md:text-sm ml-0 md:ml-2 mt-1 md:mt-0 inline-block break-keep">
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  {renderSyncBadge()}
+                  <span className="bg-indigo-800/50 px-2 py-0.5 rounded text-[10px] md:text-xs break-keep">
                     주중: 휴게시간 차감 / 주말: 1.5배 가산
                   </span>
-                </p>
+                </div>
               </div>
             </div>
             <div className="flex flex-col gap-3 w-full md:w-auto mt-2 md:mt-0 shrink-0">
@@ -267,7 +371,28 @@ export default function App() {
                 onChange={(e) => setSelectedMonth(e.target.value)}
                 className="bg-indigo-700 text-white border border-indigo-500 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-white/50 w-auto max-w-full font-bold cursor-pointer text-base text-center shadow-sm self-start md:self-end"
               />
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {drive.isEnabled() && driveStatus === 'signed-out' && (
+                  <button
+                    onClick={handleSignIn}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-indigo-700 hover:bg-indigo-50 rounded-lg text-xs font-bold transition-colors"
+                  >
+                    <LogIn className="w-3.5 h-3.5" /> Google 로그인
+                  </button>
+                )}
+                {drive.isEnabled() && driveStatus === 'signed-in' && user && (
+                  <div className="flex items-center gap-2 px-2 py-1 bg-indigo-800/50 rounded-lg">
+                    {user.picture ? (
+                      <img src={user.picture} className="w-5 h-5 rounded-full" alt="" />
+                    ) : (
+                      <UserIcon className="w-4 h-4" />
+                    )}
+                    <span className="text-xs truncate max-w-[100px]">{user.name || user.email}</span>
+                    <button onClick={handleSignOut} className="text-indigo-200 hover:text-white">
+                      <LogOut className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
                 <button
                   onClick={handleExport}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
@@ -301,7 +426,7 @@ export default function App() {
               {isSaving ? (
                 <>
                   <div className="w-4 h-4 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
-                  <span>로컬에 저장 중...</span>
+                  <span>저장 중...</span>
                 </>
               ) : isDirty ? (
                 <>
