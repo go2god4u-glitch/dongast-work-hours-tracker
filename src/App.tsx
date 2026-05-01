@@ -321,16 +321,30 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
-  // 페이지 진입 시 — 토큰 있고 userInfo 비어있으면 새로 받아본다.
-  // 옛 scope로 받은 토큰이면 자동으로 세션 정리되어 재로그인 유도됨.
+  // 페이지 진입/복귀 시 — 토큰 만료('expired') 상태면 백그라운드 silent refresh 자동 시도.
+  // iOS Safari ITP가 silent re-auth를 차단하면 사용자가 헤더의 "재인증" 버튼을 1번 클릭하면 됨.
   useEffect(() => {
     if (!drive.isEnabled()) return;
-    if (drive.getStatus() === 'signed-in' && !drive.getUser()) {
-      drive.refreshUserInfo().then(u => {
-        setUser(u);
+
+    const trySilent = async () => {
+      const status = drive.getStatus();
+      if (status === 'expired') {
+        // silent only — 실패해도 사용자에게 popup 띄우지 않음
+        await drive.trySilentRefresh();
+        setUser(drive.getUser());
         setDriveStatus(drive.getStatus());
-      });
-    }
+      } else if (status === 'signed-in' && !drive.getUser()) {
+        await drive.refreshUserInfo();
+        setUser(drive.getUser());
+      }
+    };
+
+    trySilent();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') trySilent();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
   // Fetch holidays for selected month's year (cached, fallback to static)
@@ -605,6 +619,18 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
       [targetDate]: { start: source!.start, end: source!.end, type: source!.type, m: Date.now() },
     }));
     setIsDirty(true);
+  };
+
+  const handleReauth = async () => {
+    try {
+      const u = await drive.reauthorize();
+      setUser(u);
+      setDriveStatus(drive.getStatus());
+      // 재인증 후엔 백그라운드 sync로 자연스럽게 따라잡음 — 즉시 pull은 하지 않음 (UI 안 막음)
+    } catch (e: any) {
+      console.error('Reauth failed', e);
+      setSyncState('error');
+    }
   };
 
   const handleSignIn = async () => {
@@ -910,6 +936,13 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
         </span>
       );
     }
+    if (driveStatus === 'expired') {
+      return (
+        <span className="flex items-center gap-1 text-xs text-amber-200">
+          <CloudOff className="w-3.5 h-3.5" /> 재인증 필요
+        </span>
+      );
+    }
     if (syncState === 'syncing') {
       return (
         <span className="flex items-center gap-1 text-xs text-indigo-100">
@@ -1186,23 +1219,35 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                     <LogIn className="w-3.5 h-3.5" /> Google 로그인
                   </button>
                 )}
-                {drive.isEnabled() && driveStatus === 'signed-in' && user && (
+                {drive.isEnabled() && (driveStatus === 'signed-in' || driveStatus === 'expired') && user && (
                   <div className="flex items-center gap-2 px-2 py-1 bg-indigo-800/50 rounded-lg">
                     {user.picture ? (
-                      <img src={user.picture} className="w-5 h-5 rounded-full" alt="" />
+                      <img src={user.picture} className={`w-5 h-5 rounded-full ${driveStatus === 'expired' ? 'opacity-60' : ''}`} alt="" />
                     ) : (
                       <UserIcon className="w-4 h-4" />
                     )}
                     <span className="text-xs truncate max-w-[140px]" title={user.email}>{user.email || user.name}</span>
-                    <button
-                      onClick={handleSignOut}
-                      className="flex items-center gap-1 text-indigo-100 hover:text-white hover:bg-white/10 rounded-md px-1.5 py-0.5 transition-colors"
-                      title="Google 로그아웃 (확인 후 진행)"
-                      aria-label="로그아웃"
-                    >
-                      <LogOut className="w-3.5 h-3.5" />
-                      <span className="text-[11px] font-medium">로그아웃</span>
-                    </button>
+                    {driveStatus === 'expired' ? (
+                      <button
+                        onClick={handleReauth}
+                        className="flex items-center gap-1 bg-amber-400 text-amber-900 hover:bg-amber-300 rounded-md px-2 py-0.5 transition-colors"
+                        title="세션 만료 — 한 번 클릭으로 다시 인증"
+                        aria-label="재인증"
+                      >
+                        <LogIn className="w-3.5 h-3.5" />
+                        <span className="text-[11px] font-bold">재인증</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleSignOut}
+                        className="flex items-center gap-1 text-indigo-100 hover:text-white hover:bg-white/10 rounded-md px-1.5 py-0.5 transition-colors"
+                        title="Google 로그아웃 (확인 후 진행)"
+                        aria-label="로그아웃"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        <span className="text-[11px] font-medium">로그아웃</span>
+                      </button>
+                    )}
                   </div>
                 )}
                 {(() => {

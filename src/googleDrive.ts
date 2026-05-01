@@ -39,7 +39,7 @@ declare global {
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
 const FILE_NAME = 'schedule.json';
 
-export type DriveStatus = 'disabled' | 'signed-out' | 'signed-in';
+export type DriveStatus = 'disabled' | 'signed-out' | 'signed-in' | 'expired';
 
 export interface UserInfo {
   email?: string;
@@ -55,18 +55,24 @@ let cachedFileId: string | null = null;
 let userInfo: UserInfo | null = null;
 
 // === 세션 영속화 ===
-// 페이지 리로드(브라우저 닫고 다시 열기 포함) 시 로그인 풀림 방지를 위해
-// 액세스 토큰 + 사용자 정보를 localStorage에 저장. 만료 시 자동 정리.
+// 두 단계 영속화:
+//  1) 토큰 세션 (1시간 만료) — drive_session_v1
+//  2) 사용자 정보 (영구) — drive_user_v1
+// 토큰이 만료돼도 사용자 정보는 남아있어, UI는 "expired" 상태로 표시되고
+// 한 번 클릭(재인증)으로 새 토큰 받음. iOS Safari ITP에서 silent refresh가
+// 막혀도 사용자 경험이 "1시간마다 로그인 풀림"으로 보이지 않게 함.
 const SESSION_KEY = 'drive_session_v1';
+const USER_KEY = 'drive_user_v1';
+
 interface PersistedSession {
   accessToken: string;
   expiryMs: number;
-  user: UserInfo | null;
 }
+
 const saveSession = () => {
   if (!accessToken || Date.now() >= tokenExpiryMs) return;
   try {
-    const data: PersistedSession = { accessToken, expiryMs: tokenExpiryMs, user: userInfo };
+    const data: PersistedSession = { accessToken, expiryMs: tokenExpiryMs };
     localStorage.setItem(SESSION_KEY, JSON.stringify(data));
   } catch {}
 };
@@ -81,7 +87,6 @@ const restoreSession = () => {
     if (s && s.accessToken && Date.now() < s.expiryMs) {
       accessToken = s.accessToken;
       tokenExpiryMs = s.expiryMs;
-      userInfo = s.user || null;
     } else {
       clearSession();
     }
@@ -89,7 +94,22 @@ const restoreSession = () => {
     clearSession();
   }
 };
-// 모듈 로드 시 즉시 복원
+
+const persistUser = () => {
+  try {
+    if (userInfo) localStorage.setItem(USER_KEY, JSON.stringify(userInfo));
+    else localStorage.removeItem(USER_KEY);
+  } catch {}
+};
+const restoreUser = () => {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    if (raw) userInfo = JSON.parse(raw);
+  } catch {}
+};
+
+// 모듈 로드 시 즉시 복원 (사용자 정보 먼저, 그 다음 토큰)
+restoreUser();
 restoreSession();
 
 // === 자동 토큰 갱신 (만료 5분 전 silent refresh) ===
@@ -201,16 +221,10 @@ export const refreshUserInfo = async (): Promise<UserInfo | null> => {
     if (r.ok) {
       userInfo = await r.json();
       saveSession();
+      persistUser();
       return userInfo;
-    } else {
-      // 권한 부족 — 세션 정리
-      accessToken = null;
-      tokenExpiryMs = 0;
-      userInfo = null;
-      clearSession();
-      if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
-      return null;
     }
+    return userInfo; // 실패해도 캐시된 userInfo 유지 — 재인증으로 복구 유도
   } catch {
     return userInfo;
   }
@@ -221,6 +235,7 @@ export const signIn = async (): Promise<UserInfo | null> => {
   const token = await requestToken('consent');
   userInfo = await fetchUserInfo(token);
   saveSession();
+  persistUser();
   return userInfo;
 };
 
@@ -233,14 +248,52 @@ export const signOut = () => {
   accessToken = null;
   tokenExpiryMs = 0;
   cachedFileId = null;
+  userInfo = null;
   clearSession();
+  persistUser();
   if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
   userInfo = null;
 };
 
 export const getStatus = (): DriveStatus => {
   if (!clientId) return 'disabled';
-  return accessToken && Date.now() < tokenExpiryMs ? 'signed-in' : 'signed-out';
+  if (accessToken && Date.now() < tokenExpiryMs) return 'signed-in';
+  if (userInfo) return 'expired'; // 토큰 만료지만 사용자 식별 정보는 남아있음 — 1탭 재인증 가능
+  return 'signed-out';
+};
+
+/** 백그라운드용 — silent re-auth만 시도. 실패해도 조용히 무시 (사용자에게 안 보임). */
+export const trySilentRefresh = async (): Promise<boolean> => {
+  if (!clientId) return false;
+  try {
+    await requestToken('');
+    if (accessToken) {
+      const fresh = await fetchUserInfo(accessToken);
+      if (fresh) { userInfo = fresh; persistUser(); }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** 명시적 재인증 — 사용자가 "재인증" 버튼을 누른 경우.
+ *  silent re-auth 먼저 시도, 실패 시 consent 프롬프트 한 번 띄움. */
+export const reauthorize = async (): Promise<UserInfo | null> => {
+  if (!clientId) throw new Error('Google Client ID가 설정되지 않았습니다.');
+  try {
+    await requestToken(''); // silent first
+  } catch {
+    await requestToken('consent'); // 실패 시 consent
+  }
+  if (accessToken) {
+    const fresh = await fetchUserInfo(accessToken);
+    if (fresh) {
+      userInfo = fresh;
+      persistUser();
+    }
+  }
+  return userInfo;
 };
 
 export const getUser = () => userInfo;
