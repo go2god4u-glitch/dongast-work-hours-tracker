@@ -247,19 +247,46 @@ export default function App() {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   };
 
-  /** 다른 날짜 항목 복사 (출/퇴근/유형). 같은 월 안에서만 동작 */
-  const copyFromDate = async (targetDate: string, sourceDate: string) => {
+  /** 다른 날짜 항목 복사 (출/퇴근/유형). 다른 월도 자동 로드. 확인 후 진행 */
+  const copyFromDate = async (targetDate: string, sourceDate: string, label: string) => {
     let source: DayEntry | undefined = schedule[sourceDate];
-    // 같은 월이 아니면 다른 월에서 로드
     if (!source && !sourceDate.startsWith(selectedMonth)) {
       const otherMonth = sourceDate.slice(0, 7);
       const otherData = await loadMonth(otherMonth);
       source = otherData[sourceDate];
     }
-    if (!source || (!source.start && !source.end && source.type === 'normal')) {
-      alert('복사할 데이터가 없습니다.');
+
+    const formatDate = (d: string) => {
+      const dt = new Date(d + 'T00:00:00');
+      const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+      return `${dt.getMonth() + 1}월 ${dt.getDate()}일 (${dayNames[dt.getDay()]})`;
+    };
+    const typeLabels: Record<string, string> = {
+      normal: '일반 근무',
+      family: '패밀리데이',
+      holiday: '공휴일',
+      vacation: '휴가',
+      'half-day': '반차',
+    };
+
+    if (!source || (!source.start && !source.end && (!source.type || source.type === 'normal'))) {
+      alert(`${label} (${formatDate(sourceDate)})에 복사할 데이터가 없습니다.`);
       return;
     }
+
+    const summary = [
+      `근무 유형: ${typeLabels[source.type] || source.type}`,
+      source.start ? `출근: ${source.start}` : null,
+      source.end ? `퇴근: ${source.end}` : null,
+    ].filter(Boolean).join('\n');
+
+    const ok = window.confirm(
+      `${formatDate(targetDate)}을(를) ${label} (${formatDate(sourceDate)})과 동일하게 입력합니다.\n\n` +
+      `${summary}\n\n` +
+      `현재 입력된 값이 있으면 덮어쓰여집니다. 진행할까요?`
+    );
+    if (!ok) return;
+
     setSchedule(prev => ({
       ...prev,
       [targetDate]: { start: source!.start, end: source!.end, type: source!.type, m: Date.now() },
@@ -672,17 +699,17 @@ export default function App() {
                       {!isWeekend && type === 'normal' && (
                         <span className="flex items-center gap-1 ml-auto">
                           <button
-                            onClick={() => copyFromDate(day.dateString, dateOffset(day.dateString, 1))}
+                            onClick={() => copyFromDate(day.dateString, dateOffset(day.dateString, 1), '어제')}
                             className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50"
-                            title="어제와 동일하게 입력"
+                            title="어제와 동일하게 입력 (확인 후 진행)"
                             aria-label="어제와 동일"
                           >
                             <Copy className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => copyFromDate(day.dateString, dateOffset(day.dateString, 7))}
+                            onClick={() => copyFromDate(day.dateString, dateOffset(day.dateString, 7), '지난주 같은 요일')}
                             className="p-1 rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-50"
-                            title="지난주 같은 요일과 동일하게 입력"
+                            title="지난주 같은 요일과 동일하게 입력 (확인 후 진행)"
                             aria-label="지난주 같은 요일과 동일"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
