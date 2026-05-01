@@ -321,30 +321,50 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
-  // 페이지 진입/복귀 시 — 토큰 만료('expired') 상태면 백그라운드 silent refresh 자동 시도.
-  // iOS Safari ITP가 silent re-auth를 차단하면 사용자가 헤더의 "재인증" 버튼을 1번 클릭하면 됨.
+  // 자동 silent refresh — 토큰 만료('expired') 상태면 사용자 모르게 다시 받아옴.
+  // iOS Safari ITP가 막을 수 있으므로 여러 트리거에 걸어 성공 확률을 최대화:
+  //  - 마운트 시
+  //  - 탭 보임 (visibilitychange visible)
+  //  - 창 포커스 (focus)
+  //  - 60초마다 (만료 상태일 때만 실제 시도)
+  // 사용자에게 재인증 버튼/배너 안 보임. 모두 백그라운드 처리.
   useEffect(() => {
     if (!drive.isEnabled()) return;
 
+    let busy = false;
     const trySilent = async () => {
+      if (busy) return;
       const status = drive.getStatus();
-      if (status === 'expired') {
-        // silent only — 실패해도 사용자에게 popup 띄우지 않음
-        await drive.trySilentRefresh();
-        setUser(drive.getUser());
-        setDriveStatus(drive.getStatus());
-      } else if (status === 'signed-in' && !drive.getUser()) {
+      if (status === 'signed-in' && !drive.getUser()) {
+        busy = true;
         await drive.refreshUserInfo();
         setUser(drive.getUser());
+        busy = false;
+        return;
       }
+      if (status !== 'expired') return;
+      busy = true;
+      const ok = await drive.trySilentRefresh();
+      if (ok) {
+        setUser(drive.getUser());
+        setDriveStatus(drive.getStatus());
+      }
+      busy = false;
     };
 
     trySilent();
     const onVisibility = () => {
       if (document.visibilityState === 'visible') trySilent();
     };
+    const onFocus = () => trySilent();
     document.addEventListener('visibilitychange', onVisibility);
-    return () => document.removeEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', onFocus);
+    const interval = setInterval(trySilent, 60 * 1000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+      clearInterval(interval);
+    };
   }, []);
 
   // Fetch holidays for selected month's year (cached, fallback to static)
@@ -936,13 +956,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
         </span>
       );
     }
-    if (driveStatus === 'expired') {
-      return (
-        <span className="flex items-center gap-1 text-xs text-amber-200">
-          <CloudOff className="w-3.5 h-3.5" /> 재인증 필요
-        </span>
-      );
-    }
+    // 'expired'는 사용자에게 안 보임 — 백그라운드에서 자동 silent refresh 시도
     if (syncState === 'syncing') {
       return (
         <span className="flex items-center gap-1 text-xs text-indigo-100">
@@ -1222,32 +1236,20 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                 {drive.isEnabled() && (driveStatus === 'signed-in' || driveStatus === 'expired') && user && (
                   <div className="flex items-center gap-2 px-2 py-1 bg-indigo-800/50 rounded-lg">
                     {user.picture ? (
-                      <img src={user.picture} className={`w-5 h-5 rounded-full ${driveStatus === 'expired' ? 'opacity-60' : ''}`} alt="" />
+                      <img src={user.picture} className="w-5 h-5 rounded-full" alt="" />
                     ) : (
                       <UserIcon className="w-4 h-4" />
                     )}
                     <span className="text-xs truncate max-w-[140px]" title={user.email}>{user.email || user.name}</span>
-                    {driveStatus === 'expired' ? (
-                      <button
-                        onClick={handleReauth}
-                        className="flex items-center gap-1 bg-amber-400 text-amber-900 hover:bg-amber-300 rounded-md px-2 py-0.5 transition-colors"
-                        title="세션 만료 — 한 번 클릭으로 다시 인증"
-                        aria-label="재인증"
-                      >
-                        <LogIn className="w-3.5 h-3.5" />
-                        <span className="text-[11px] font-bold">재인증</span>
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleSignOut}
-                        className="flex items-center gap-1 text-indigo-100 hover:text-white hover:bg-white/10 rounded-md px-1.5 py-0.5 transition-colors"
-                        title="Google 로그아웃 (확인 후 진행)"
-                        aria-label="로그아웃"
-                      >
-                        <LogOut className="w-3.5 h-3.5" />
-                        <span className="text-[11px] font-medium">로그아웃</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center gap-1 text-indigo-100 hover:text-white hover:bg-white/10 rounded-md px-1.5 py-0.5 transition-colors"
+                      title="Google 로그아웃 (확인 후 진행)"
+                      aria-label="로그아웃"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span className="text-[11px] font-medium">로그아웃</span>
+                    </button>
                   </div>
                 )}
                 {(() => {
