@@ -12,17 +12,63 @@ html, body {
   overscroll-behavior-y: contain;
 }
 
-/* iOS safe-area helpers */
-.safe-top {
-  padding-top: env(safe-area-inset-top);
-}
-.safe-bottom {
-  padding-bottom: env(safe-area-inset-bottom);
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+@supports (-webkit-touch-callout: none) {
+  select, input[type="month"] { font-size: 16px !important; }
 }
 
-/* iOS Safari에서 form 자동 줌 방지: 16px 이상 */
-@supports (-webkit-touch-callout: none) {
-  select, input[type="month"] {
-    font-size: 16px !important;
-  }
+/* ===== Dark mode ===== */
+html.dark, html.dark body { background: #0b0b0e; color: #e4e4e7; }
+
+html.dark .bg-gray-50 { background-color: #0f1116 !important; }
+html.dark .bg-gray-50\/50 { background-color: rgba(15,17,22,0.6) !important; }
+html.dark .bg-gray-50\/80 { background-color: rgba(15,17,22,0.85) !important; }
+html.dark .bg-white { background-color: #18181b !important; }
+
+html.dark .bg-indigo-50 { background-color: #1e1b4b !important; }
+html.dark .bg-indigo-50\/30 { background-color: rgba(30,27,75,0.4) !important; }
+html.dark .bg-indigo-50\/50 { background-color: rgba(30,27,75,0.5) !important; }
+html.dark .bg-indigo-100 { background-color: #312e81 !important; }
+html.dark .text-indigo-600 { color: #a5b4fc !important; }
+html.dark .text-indigo-700 { color: #c7d2fe !important; }
+html.dark .text-indigo-800 { color: #c7d2fe !important; }
+
+html.dark .text-gray-300 { color: #a1a1aa !important; }
+html.dark .text-gray-400 { color: #a1a1aa !important; }
+html.dark .text-gray-500 { color: #d4d4d8 !important; }
+html.dark .text-gray-700 { color: #e4e4e7 !important; }
+html.dark .text-gray-900 { color: #fafafa !important; }
+
+html.dark .border-gray-100 { border-color: #27272a !important; }
+html.dark .border-gray-200 { border-color: #27272a !important; }
+html.dark .border-gray-300 { border-color: #3f3f46 !important; }
+html.dark .border-indigo-100 { border-color: #3730a3 !important; }
+
+html.dark .bg-amber-50 { background-color: #451a03 !important; }
+html.dark .text-amber-800 { color: #fde68a !important; }
+html.dark .text-amber-900 { color: #fef3c7 !important; }
+html.dark .border-amber-200 { border-color: #78350f !important; }
+
+html.dark .bg-red-50 { background-color: #450a0a !important; }
+html.dark .text-red-500 { color: #fca5a5 !important; }
+
+html.dark .bg-rose-100 { background-color: #4c0519 !important; }
+
+/* select/input 어두운 배경 */
+html.dark select,
+html.dark input[type="month"] {
+  background-color: #18181b !important;
+  color: #e4e4e7 !important;
+  border-color: #3f3f46 !important;
 }
+html.dark select:disabled {
+  background-color: #27272a !important;
+  color: #71717a !important;
+}
+
+/* shadow 약화 */
+html.dark .shadow-xl { box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 20px 40px rgba(0,0,0,0.6); }
+html.dark .shadow-2xl { box-shadow: 0 0 0 1px rgba(255,255,255,0.04), 0 25px 50px rgba(0,0,0,0.7); }
+html.dark .shadow-sm { box-shadow: 0 0 0 1px rgba(255,255,255,0.03); }
