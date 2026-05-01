@@ -1,3 +1,71 @@
+/**
+ * ============================================================
+ *  오늘도 출근! 💪🏻 — 출퇴근 시간 기록 PWA
+ *  Repo: github.com/go2god4u-glitch/dongast-work-hours-tracker
+ * ============================================================
+ *
+ * [ 데이터 / 저장 ]
+ *  - 주 저장소: 브라우저 IndexedDB (idb-keyval, src/storage.ts)
+ *  - 보조 저장소: Google Drive appDataFolder (사용자 본인만 접근 가능)
+ *  - 일자 항목마다 m(modifiedAt) 타임스탬프 → 다중 기기 동시 편집 시 일자별 머지
+ *  - 로컬 저장 = 즉시 / Drive sync = 30초마다 + 탭 숨김 + 페이지 떠날 때 자동 push
+ *  - 세션은 localStorage에 영속화. 토큰 만료 5분 전 silent refresh 자동 스케줄
+ *
+ * [ 입력 / 계산 ]
+ *  - 30분 단위 시간 슬롯 (회사 정책, 관리자 설정에서 변경 가능)
+ *  - 5가지 근무 유형: 일반 / 패밀리데이 / 공휴일 / 휴가 / 반차
+ *  - 휴게시간 자동 차감 (8h↑ 1시간, 13h↑ 1.5시간 — 모두 설정 가능)
+ *  - 주말 1.5배 가산 (설정 가능)
+ *  - 월 171시간 법정 상한 — 초과 시 마지막 금요일부터 거꾸로 차감
+ *    (한 날 최대 2시간, 최소 6시간 보장 → 부족 시 목/수/화/월로 cascade)
+ *  - 한국 공휴일 자동 마킹 (date.nager.at API + 7일 캐시 + 정적 폴백)
+ *
+ * [ UI / UX ]
+ *  - 헤더 동적 타이틀: "오늘도 출근! 💪🏻" / "퇴근까지 N시간 M분 🤗" / "퇴근 💕"
+ *  - "지금 출근/퇴근" 1-탭 기록 배너 (오늘 카드 위, 시간대 조건 충족 시)
+ *  - 빠른 입력: "어제와 동일" / "지난주 같은 요일과 동일" (확인 다이얼로그)
+ *  - 월말 회고 모달 (📊): 야근(18시 이후), 평균 출근/퇴근, 주별/요일별 차트
+ *  - 4가지 테마: 라이트 / 다크 / 핑크(공주) / 파스텔 (View Transitions API 페이드)
+ *  - Pull-to-refresh: 70px 끌면 새로고침
+ *  - PWA: manifest + service worker + 오프라인 캐시
+ *  - 미입력 셀에 옅은 노랑 hint outline
+ *  - 좌측 컬러 stripe (요일/유형별), 호버 lift, hover shimmer
+ *  - "오늘" 카드 강조 (글로우 + 펄스 배지 + 도트 패턴)
+ *  - 부족 시간 단계별 빨강 그라데이션 (1~3 옅음 → 8 초과 진한+깜빡임)
+ *  - CountUp 애니메이션 (숫자 변경 시 부드럽게 차오름)
+ *  - 헤더 캘린더 아이콘 둥둥 부유 (animate-float)
+ *  - 글래스모피즘 (헤더 안 박스들)
+ *
+ * [ 관리자 (go2god4u@gmail.com 한정) ]
+ *  - ⚙️ 회사 정책 모달 (src/AdminSettings.tsx)
+ *      • 171시간 상한, 일일 시간, 휴게/가산, 시간 단위, 시간 범위, 유형 토글 등 모두 변경 가능
+ *      • localStorage(`app_config_v1`)에 저장 → 다른 회사도 자기 정책으로 사용 가능
+ *  - 👤➕ Google Cloud Console 테스트 사용자 추가 바로가기
+ *
+ * [ 사용 설명서 (❓) ]
+ *  - 14개 섹션: 입력/타이틀/유형/계산/빠른입력/지금기록/회고/저장/색상/테마/PWA/PTR/관리자/hint
+ *  - src/Manual.tsx 별도 파일로 분리 — 매뉴얼 수정 시 그 파일만 편집
+ *
+ * [ 폰트 ]
+ *  - Inter + JetBrains Mono를 fontsource로 self-host (Google Fonts CDN 의존성 0)
+ *
+ * [ 버전 표시 ]
+ *  - 화면 맨 아래 "v{날짜} · {git short hash}" — 매 push마다 vite.config.ts가 자동 갱신
+ *
+ * [ 진행한 주요 변화 (시간순) ]
+ *  - Firebase 의존 → 완전 제거, IndexedDB + Drive appDataFolder로 전환
+ *  - 다중 사용자 → 각자 본인 Drive에 격리 저장
+ *  - GitHub Pages 자동 배포 (.github/workflows/deploy.yml)
+ *  - 30분 단위 정책, 171시간 캡 cascade, 공휴일 자동 갱신
+ *  - 동기화 충돌 보호 (per-day modifiedAt 머지)
+ *  - PWA + iOS safe-area + ITP 회피 안내
+ *  - 4 테마 + Pull-to-refresh + 시각 디테일 14가지
+ *  - 토큰 영속화 + silent refresh로 1시간 재로그인 문제 해결
+ *  - Drive sync를 저장 흐름과 분리 → UI 빠른 응답
+ *  - 회사 정책 관리 페이지 (다른 회사도 사용 가능)
+ *  - 햅틱 제거 (iOS 미지원)
+ * ============================================================
+ */
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Clock,
@@ -1075,9 +1143,11 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                 })()}</h1>
                 <div className="mt-1.5 flex flex-wrap items-center gap-2">
                   {renderSyncBadge()}
-                  <span className="bg-indigo-800/50 px-2 py-0.5 rounded text-[10px] md:text-xs break-keep">
-                    주중: 휴게시간 차감 / 주말: 1.5배 가산
-                  </span>
+                  {cfg.companyName && (
+                    <span className="bg-indigo-800/50 px-2 py-0.5 rounded text-[10px] md:text-xs break-keep">
+                      {cfg.companyName}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

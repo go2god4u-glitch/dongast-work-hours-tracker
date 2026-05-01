@@ -1,7 +1,29 @@
-// Google Drive (appDataFolder) 동기화 모듈
-// - 사용자별 본인 계정의 앱 전용 폴더에 schedule.json 한 파일을 두고 덮어씁니다.
-// - 다른 사용자/앱은 이 파일에 접근할 수 없습니다 (drive.appdata 스코프 한정).
-// - 토큰은 메모리에만 보관 (1시간 만료). 만료 시 silent re-auth 시도.
+/**
+ * Google Drive 동기화 모듈
+ *
+ * 핵심 컨셉:
+ *  - 각 사용자의 본인 Google Drive 안 'appDataFolder'(앱 전용 숨김 폴더)에
+ *    schedule.json 한 파일을 두고 덮어씁니다.
+ *  - 다른 사용자/앱은 이 파일에 절대 접근 불가 (Google이 강제 격리).
+ *  - 관리자(앱 소유자)도 다른 사용자 데이터 못 봄 → 개인정보 안전.
+ *
+ * Scope:
+ *  - drive.appdata: 앱 전용 폴더 읽기/쓰기
+ *  - userinfo.email + userinfo.profile: 사용자 식별 (관리자 판별, 헤더 표시)
+ *
+ * 세션 영속화:
+ *  - localStorage `drive_session_v1`에 accessToken + expiry + userInfo 저장
+ *  - 페이지 리로드/앱 재시작 시 자동 복원 (사용자가 매번 재로그인 안 함)
+ *  - 만료 5분 전 백그라운드 silent refresh (사용자 무인지)
+ *  - email hint 사용 → silent re-auth 신뢰성 향상
+ *
+ * 동기화 전략:
+ *  - signIn: requestToken('consent') → fetchUserInfo → saveSession
+ *  - syncAll: download + per-day modifiedAt 머지 + upload (다중 기기 보호)
+ *  - uploadAll: 단순 업로드 (백그라운드 빠른 push용)
+ *  - downloadAll: Drive에서 통째로 받기
+ *  - signOut: 토큰 revoke + 세션 정리 + 자동 갱신 타이머 정지
+ */
 
 import type { AllMonths } from './storage';
 import { mergeAll } from './storage';

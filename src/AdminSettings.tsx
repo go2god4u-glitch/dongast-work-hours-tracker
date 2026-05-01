@@ -1,3 +1,20 @@
+/**
+ * 관리자 — 회사 정책 설정 모달
+ *
+ * - 헤더의 ⚙️ 버튼 (go2god4u@gmail.com 로그인 시에만 가시) 클릭 시 열림
+ * - localStorage(`app_config_v1`)에 저장 → 다음 방문에도 유지
+ * - "기본값으로" 버튼: 모든 정책을 DEFAULT_CONFIG로 일괄 리셋
+ *
+ * 변경 가능한 정책:
+ *  - 시간: 월 상한, 일일 기본/반차 시간, 슬롯 단위(분)
+ *  - 휴게/가산: 짧은/긴 휴게시간, 장시간 임계, 주말 가산율(+ 활성화 토글)
+ *  - 캡 차감: 일일 최대 차감, 일일 최소 보장
+ *  - 시간 범위: 평일 출/퇴근, 주말, 반차 출근 시간 범위
+ *  - 유형: 패밀리데이/반차 활성화 토글, 패밀리데이 적용 요일
+ *  - 표시: 회사명 (선택)
+ *
+ * 다른 회사가 사용할 때: 관리자가 본인 회사 정책에 맞게 한 번만 설정하면 끝.
+ */
 import { useState } from 'react';
 import { X, Settings, RotateCcw } from 'lucide-react';
 import { AppConfig, DEFAULT_CONFIG, resetConfig } from './config';
