@@ -534,7 +534,9 @@ export default function App() {
       <div className="max-w-3xl mx-auto relative pb-32">
         <div className="bg-white shadow-xl rounded-2xl overflow-hidden">
           {/* Header */}
-          <div className="bg-indigo-600 px-4 py-6 md:px-8 md:py-10 text-white flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-6">
+          <div className="relative overflow-hidden bg-gradient-to-br from-indigo-600 via-purple-600 to-fuchsia-500 px-4 py-6 md:px-8 md:py-10 text-white flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-6">
+            <div className="absolute -top-16 -right-16 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-20 -left-10 w-72 h-72 bg-fuchsia-300/20 rounded-full blur-3xl pointer-events-none" />
             <div className="flex items-start md:items-center gap-3 md:gap-4">
               <div className="p-2 md:p-3 bg-white/20 rounded-xl shrink-0">
                 <Calendar className="w-6 h-6 md:w-8 md:h-8 text-white" />
@@ -687,15 +689,27 @@ export default function App() {
                   dotColor = 'bg-red-400';
                 }
 
-                const bgColor = isToday ? 'bg-indigo-50/50' : (isWeekend ? 'bg-gray-50/80' : 'bg-white');
-                const borderColor = isToday ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-gray-100';
+                const bgColor = isToday
+                  ? 'bg-indigo-50/50'
+                  : (isWeekend ? 'bg-gray-50/80' : 'bg-white');
+                const borderColor = isToday
+                  ? 'border-indigo-300 ring-2 ring-indigo-400/30 shadow-indigo-200/50'
+                  : 'border-gray-100';
+                const stripeColor = isSpecialLeave
+                  ? 'bg-gradient-to-b from-pink-400 to-rose-400'
+                  : isHolidayOrWeekend
+                  ? 'bg-gradient-to-b from-red-400 to-rose-400'
+                  : isToday
+                  ? 'bg-gradient-to-b from-indigo-500 to-purple-500'
+                  : 'bg-gradient-to-b from-indigo-300 to-indigo-200';
 
                 return (
                   <div
                     key={day.dateString}
                     ref={isToday ? todayRef : null}
-                    className={`flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl border transition-all shadow-sm ${bgColor} ${borderColor} ${isToday ? 'z-10 relative' : ''}`}
+                    className={`relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-3 p-3 pl-4 rounded-xl border transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 ${bgColor} ${borderColor} ${isToday ? 'z-10 relative shadow-lg' : ''}`}
                   >
+                    <div className={`absolute left-0 top-0 bottom-0 w-1 ${stripeColor}`} />
                     <div className={`sm:w-44 font-medium flex items-center flex-wrap gap-x-2 gap-y-1 ${dayColor}`}>
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`}></span>
                       <span className="flex-shrink-0">{day.dayNumber}일 ({day.dayName})</span>
@@ -703,7 +717,7 @@ export default function App() {
                         <span className="text-[10px] text-red-500 font-bold px-1.5 py-0.5 bg-red-50 rounded-md whitespace-nowrap">{holidays[day.dateString]}</span>
                       )}
                       {isToday && (
-                        <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-md font-bold animate-pulse whitespace-nowrap">오늘</span>
+                        <span className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-[10px] px-1.5 py-0.5 rounded-md font-bold animate-pulse whitespace-nowrap shadow-sm shadow-indigo-500/30">오늘</span>
                       )}
                       {!isWeekend && type === 'normal' && (
                         <span className="flex items-center gap-1 ml-auto">
@@ -810,8 +824,10 @@ export default function App() {
           style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 1rem)' }}
         >
           <div className="w-full max-w-3xl pointer-events-auto">
-            <div className="flex flex-col bg-gray-900/95 backdrop-blur-md rounded-2xl p-4 sm:p-6 text-white shadow-2xl border border-gray-800 gap-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="relative overflow-hidden flex flex-col bg-gradient-to-br from-gray-900 via-slate-900 to-indigo-950 backdrop-blur-md rounded-2xl p-4 sm:p-6 text-white shadow-2xl border border-indigo-900/40 gap-4">
+              <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="relative flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-white/10 rounded-lg hidden sm:block">
