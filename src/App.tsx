@@ -19,6 +19,12 @@ import {
   Sparkles,
   HelpCircle,
   X,
+  BarChart3,
+  TrendingUp,
+  Award,
+  Coffee,
+  Sunrise,
+  Sunset,
 } from 'lucide-react';
 
 const ADMIN_EMAIL = 'go2god4u@gmail.com';
@@ -96,6 +102,7 @@ export default function App() {
 
   const [nowPromptDismissed, setNowPromptDismissed] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showRecap, setShowRecap] = useState(false);
   // 헤더 타이틀이 1분마다 갱신되도록 tick
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -616,6 +623,111 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
   const diffWeight = deficit > 8 ? 'font-extrabold' : 'font-bold';
   const diffPulse = deficit > 8 ? 'animate-pulse' : '';
 
+  /** 월말 회고 통계 */
+  const recap = useMemo(() => {
+    const fmtMin = (m: number) => {
+      const h = Math.floor(m / 60);
+      const mm = Math.round(m % 60);
+      return `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    };
+
+    const startMins: number[] = [];
+    const endMins: number[] = [];
+    let overtimeDays = 0;
+    let earliestStart: { date: string; time: string; total: number } | null = null;
+    let latestEnd: { date: string; time: string; total: number } | null = null;
+    const counts = { holiday: 0, vacation: 0, family: 0, halfDay: 0 };
+
+    daysInMonth.forEach(d => {
+      const e = schedule[d.dateString];
+      if (!e) return;
+      if (e.type === 'holiday') counts.holiday++;
+      else if (e.type === 'vacation') counts.vacation++;
+      else if (e.type === 'family') counts.family++;
+      else if (e.type === 'half-day') counts.halfDay++;
+
+      if (e.start) {
+        const [h, m] = e.start.split(':').map(Number);
+        const total = h * 60 + m;
+        startMins.push(total);
+        if (!earliestStart || total < earliestStart.total) {
+          earliestStart = { date: d.dateString, time: e.start, total };
+        }
+      }
+      if (e.end) {
+        const [h, m] = e.end.split(':').map(Number);
+        const total = h * 60 + m;
+        endMins.push(total);
+        if (!latestEnd || total > latestEnd.total) {
+          latestEnd = { date: d.dateString, time: e.end, total };
+        }
+        if (total >= 18 * 60) overtimeDays++;
+      }
+    });
+
+    const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+
+    // 주차 합계 — 월의 첫째 일요일 기준
+    const weekMap = new Map<number, number>();
+    daysInMonth.forEach(d => {
+      const dt = new Date(d.dateString + 'T00:00:00');
+      const day1 = new Date(dt.getFullYear(), dt.getMonth(), 1);
+      const offset = day1.getDay();
+      const weekIdx = Math.floor((dt.getDate() + offset - 1) / 7);
+      weekMap.set(weekIdx, (weekMap.get(weekIdx) || 0) + (dailyHours[d.dateString] || 0));
+    });
+    const weekly = Array.from(weekMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([idx, h]) => ({ label: `${idx + 1}주차`, hours: Math.round(h * 10) / 10 }));
+
+    // 요일별 평균 — 실제 입력된 평일만
+    const dowBuckets: number[][] = [[], [], [], [], [], [], []];
+    daysInMonth.forEach(d => {
+      const dt = new Date(d.dateString + 'T00:00:00');
+      const dow = dt.getDay();
+      const e = schedule[d.dateString];
+      if (e?.start && e?.end) {
+        const h = dailyHours[d.dateString] || 0;
+        if (h > 0) dowBuckets[dow].push(h);
+      }
+    });
+    const dowAvg = dowBuckets.map(arr =>
+      arr.length ? Math.round((arr.reduce((a, b) => a + b, 0) / arr.length) * 10) / 10 : 0
+    );
+
+    // 연속 출근 streak (start+end 모두 입력된 날)
+    let maxStreak = 0;
+    let curStreak = 0;
+    [...daysInMonth].forEach(d => {
+      const e = schedule[d.dateString];
+      if (e?.start && e?.end) {
+        curStreak++;
+        maxStreak = Math.max(maxStreak, curStreak);
+      } else {
+        curStreak = 0;
+      }
+    });
+
+    const enteredDays = daysInMonth.filter(d => {
+      const e = schedule[d.dateString];
+      return e?.start && e?.end;
+    }).length;
+
+    return {
+      fmtMin,
+      avgStart: avg(startMins),
+      avgEnd: avg(endMins),
+      overtimeDays,
+      counts,
+      weekly,
+      dowAvg,
+      earliestStart: earliestStart as null | { date: string; time: string; total: number },
+      latestEnd: latestEnd as null | { date: string; time: string; total: number },
+      maxStreak,
+      enteredDays,
+    };
+  }, [daysInMonth, schedule, dailyHours]);
+
   const renderSyncBadge = () => {
     if (!drive.isEnabled()) {
       return (
@@ -666,6 +778,141 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
           <RotateCcw className="w-5 h-5 text-indigo-600" />
         </div>
       )}
+
+      {showRecap && (() => {
+        const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+        const maxWeekly = Math.max(...recap.weekly.map(w => w.hours), 1);
+        const maxDow = Math.max(...recap.dowAvg, 1);
+        const fmtDate = (d: string) => {
+          const dt = new Date(d + 'T00:00:00');
+          return `${dt.getMonth() + 1}/${dt.getDate()} (${dayNames[dt.getDay()]})`;
+        };
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-6 animate-[fadeIn_0.2s_ease-out]"
+            onClick={() => setShowRecap(false)}
+          >
+            <div
+              className="help-modal w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+              style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            >
+              <div className="sticky top-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-500 text-white px-6 py-4 flex items-center justify-between rounded-t-3xl z-10">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5" />
+                  <h2 className="text-lg font-bold">{selectedMonth} 회고</h2>
+                </div>
+                <button onClick={() => setShowRecap(false)} className="p-1.5 hover:bg-white/20 rounded-lg" aria-label="닫기">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="px-5 py-5 space-y-6 text-sm">
+                {/* 핵심 숫자 카드 */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="rounded-xl bg-indigo-50 p-3">
+                    <div className="text-xs text-indigo-700 mb-1 flex items-center gap-1"><TrendingUp className="w-3 h-3" /> 누적</div>
+                    <div className="text-xl font-bold num text-indigo-900">{totalHours}<span className="text-xs font-medium ml-0.5">h</span></div>
+                    <div className="text-[10px] text-indigo-600 mt-0.5">목표 {targetMonthlyHours}h</div>
+                  </div>
+                  <div className="rounded-xl bg-amber-50 p-3">
+                    <div className="text-xs text-amber-700 mb-1 flex items-center gap-1"><Coffee className="w-3 h-3" /> 야근</div>
+                    <div className="text-xl font-bold num text-amber-900">{recap.overtimeDays}<span className="text-xs font-medium ml-0.5">일</span></div>
+                    <div className="text-[10px] text-amber-600 mt-0.5">퇴근 18시 이후</div>
+                  </div>
+                  <div className="rounded-xl bg-emerald-50 p-3">
+                    <div className="text-xs text-emerald-700 mb-1 flex items-center gap-1"><Award className="w-3 h-3" /> 연속 출근</div>
+                    <div className="text-xl font-bold num text-emerald-900">{recap.maxStreak}<span className="text-xs font-medium ml-0.5">일</span></div>
+                    <div className="text-[10px] text-emerald-600 mt-0.5">최장 streak</div>
+                  </div>
+                  <div className="rounded-xl bg-sky-50 p-3">
+                    <div className="text-xs text-sky-700 mb-1 flex items-center gap-1"><Sunrise className="w-3 h-3" /> 평균 출근</div>
+                    <div className="text-xl font-bold num text-sky-900">{recap.avgStart > 0 ? recap.fmtMin(recap.avgStart) : '-'}</div>
+                  </div>
+                  <div className="rounded-xl bg-rose-50 p-3">
+                    <div className="text-xs text-rose-700 mb-1 flex items-center gap-1"><Sunset className="w-3 h-3" /> 평균 퇴근</div>
+                    <div className="text-xl font-bold num text-rose-900">{recap.avgEnd > 0 ? recap.fmtMin(recap.avgEnd) : '-'}</div>
+                  </div>
+                  <div className="rounded-xl bg-purple-50 p-3">
+                    <div className="text-xs text-purple-700 mb-1">기록 일수</div>
+                    <div className="text-xl font-bold num text-purple-900">{recap.enteredDays}<span className="text-xs font-medium ml-0.5">일</span></div>
+                    <div className="text-[10px] text-purple-600 mt-0.5">출/퇴근 모두 입력</div>
+                  </div>
+                </div>
+
+                {/* 휴일/휴가 */}
+                <div className="rounded-xl border border-gray-100 p-3">
+                  <div className="text-xs font-bold text-gray-500 mb-2">휴일 · 휴가</div>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div><div className="text-lg font-bold num">{recap.counts.holiday}</div><div className="text-[10px] text-gray-500">공휴일</div></div>
+                    <div><div className="text-lg font-bold num">{recap.counts.vacation}</div><div className="text-[10px] text-gray-500">휴가</div></div>
+                    <div><div className="text-lg font-bold num">{recap.counts.family}</div><div className="text-[10px] text-gray-500">패밀리데이</div></div>
+                    <div><div className="text-lg font-bold num">{recap.counts.halfDay}</div><div className="text-[10px] text-gray-500">반차</div></div>
+                  </div>
+                </div>
+
+                {/* 주별 막대 차트 */}
+                <div>
+                  <div className="text-xs font-bold text-gray-500 mb-2">주별 누적 시간</div>
+                  <div className="flex items-end gap-2 px-1">
+                    {recap.weekly.map((w, i) => (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                        <span className="text-[10px] num text-gray-600">{w.hours}h</span>
+                        <div
+                          className="w-full bg-gradient-to-t from-indigo-500 to-purple-400 rounded-t-md"
+                          style={{ height: `${Math.max(4, (w.hours / maxWeekly) * 96)}px` }}
+                        />
+                        <span className="text-[10px] text-gray-500">{w.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 요일별 평균 */}
+                <div>
+                  <div className="text-xs font-bold text-gray-500 mb-2">요일별 평균 근무 시간</div>
+                  <div className="space-y-1.5">
+                    {[1, 2, 3, 4, 5].map(dow => (
+                      <div key={dow} className="flex items-center gap-2">
+                        <div className="w-6 text-xs text-gray-600 font-medium">{dayNames[dow]}</div>
+                        <div className="flex-1 bg-gray-100 rounded h-5 relative overflow-hidden">
+                          <div
+                            className="absolute inset-y-0 left-0 bg-gradient-to-r from-indigo-400 to-purple-400 rounded"
+                            style={{ width: `${(recap.dowAvg[dow] / maxDow) * 100}%` }}
+                          />
+                          <span className="absolute inset-0 flex items-center justify-end pr-2 text-[10px] num font-bold text-gray-700">
+                            {recap.dowAvg[dow] > 0 ? `${recap.dowAvg[dow]}h` : '-'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 기록 */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl bg-yellow-50 p-3">
+                    <div className="text-xs text-yellow-700 mb-1">가장 빠른 출근</div>
+                    <div className="text-base font-bold num text-yellow-900">{recap.earliestStart ? recap.earliestStart.time : '-'}</div>
+                    <div className="text-[10px] text-yellow-600 mt-0.5">{recap.earliestStart ? fmtDate(recap.earliestStart.date) : ''}</div>
+                  </div>
+                  <div className="rounded-xl bg-orange-50 p-3">
+                    <div className="text-xs text-orange-700 mb-1">가장 늦은 퇴근</div>
+                    <div className="text-base font-bold num text-orange-900">{recap.latestEnd ? recap.latestEnd.time : '-'}</div>
+                    <div className="text-[10px] text-orange-600 mt-0.5">{recap.latestEnd ? fmtDate(recap.latestEnd.date) : ''}</div>
+                  </div>
+                </div>
+
+                {recap.enteredDays === 0 && (
+                  <div className="text-center text-gray-400 text-xs py-4">
+                    아직 기록된 데이터가 없습니다.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showHelp && (
         <div
@@ -911,6 +1158,14 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                   <UserPlus className="w-3.5 h-3.5" />
                 </a>
                 <button
+                  onClick={() => setShowRecap(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
+                  title="이번 달 회고"
+                  aria-label="이번 달 회고"
+                >
+                  <BarChart3 className="w-3.5 h-3.5" />
+                </button>
+                <button
                   onClick={() => setShowHelp(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
                   title="사용 설명서"
@@ -959,35 +1214,6 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
             </AnimatePresence>
           </div>
 
-          {/* Now-clock prompt */}
-          {nowPrompt && (
-            <div className="mx-4 mt-4 sm:mx-6 bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-sm">
-              <div className="min-w-0">
-                <div className="font-bold text-indigo-900 text-sm mb-0.5">
-                  {nowPrompt.kind === 'start' ? '지금 출근하셨나요?' : '지금 퇴근하시나요?'}
-                </div>
-                <div className="text-xs text-indigo-700">
-                  현재 시각을 30분 단위로 반올림해 <b>{nowPrompt.time}</b>으로 기록합니다.
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={acceptNowPrompt}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold px-3 sm:px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
-                >
-                  {nowPrompt.time} 기록
-                </button>
-                <button
-                  onClick={() => setNowPromptDismissed(true)}
-                  className="text-gray-500 hover:text-gray-700 text-xs sm:text-sm px-2 py-2"
-                  aria-label="닫기"
-                >
-                  취소
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Content */}
           <div className="px-4 py-4 sm:p-6">
             <div className="space-y-2">
@@ -1032,8 +1258,35 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                 const showPattern = isToday || (isHolidayOrWeekend && type === 'holiday');
                 const isFlash = flashedDate === day.dateString;
                 return (
+                  <React.Fragment key={day.dateString}>
+                    {isToday && nowPrompt && (
+                      <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-sm">
+                        <div className="min-w-0">
+                          <div className="font-bold text-indigo-900 text-sm mb-0.5">
+                            {nowPrompt.kind === 'start' ? '지금 출근하셨나요?' : '지금 퇴근하시나요?'}
+                          </div>
+                          <div className="text-xs text-indigo-700">
+                            현재 시각을 30분 단위로 반올림해 <b>{nowPrompt.time}</b>으로 기록합니다.
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={acceptNowPrompt}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs sm:text-sm font-bold px-3 sm:px-4 py-2 rounded-lg transition-colors whitespace-nowrap"
+                          >
+                            {nowPrompt.time} 기록
+                          </button>
+                          <button
+                            onClick={() => setNowPromptDismissed(true)}
+                            className="text-gray-500 hover:text-gray-700 text-xs sm:text-sm px-2 py-2"
+                            aria-label="닫기"
+                          >
+                            취소
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   <div
-                    key={day.dateString}
                     ref={isToday ? todayRef : null}
                     className={`shimmer-card relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-3 p-3 pl-4 rounded-xl border transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 ${bgColor} ${borderColor} ${isToday ? 'z-10 relative shadow-lg' : ''} ${isFlash ? 'animate-flash' : ''}`}
                   >
@@ -1143,6 +1396,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                       </span>
                     </div>
                   </div>
+                  </React.Fragment>
                 );
               })}
             </div>
