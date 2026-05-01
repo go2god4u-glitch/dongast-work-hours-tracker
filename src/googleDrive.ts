@@ -12,7 +12,9 @@ declare global {
   }
 }
 
-const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+// drive.appdata: 앱 전용 폴더에 데이터 저장
+// email/profile: 헤더에 사용자 이메일·프로필 사진 표시 + 관리자 식별
+const SCOPE = 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
 const FILE_NAME = 'schedule.json';
 
 export type DriveStatus = 'disabled' | 'signed-out' | 'signed-in';
@@ -160,6 +162,35 @@ const fetchUserInfo = async (token: string): Promise<UserInfo | null> => {
     return (await r.json()) as UserInfo;
   } catch {
     return null;
+  }
+};
+
+/**
+ * 현재 토큰으로 userInfo를 새로 받아온다.
+ * - 옛 scope로 받은 세션엔 userinfo 권한이 없을 수 있음 → 그 경우 세션 정리해서 재로그인 유도.
+ * - App.tsx에서 mount 시 호출하면, 옛 사용자도 자동으로 정리됨.
+ */
+export const refreshUserInfo = async (): Promise<UserInfo | null> => {
+  if (!accessToken || Date.now() >= tokenExpiryMs) return userInfo;
+  try {
+    const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (r.ok) {
+      userInfo = await r.json();
+      saveSession();
+      return userInfo;
+    } else {
+      // 권한 부족 — 세션 정리
+      accessToken = null;
+      tokenExpiryMs = 0;
+      userInfo = null;
+      clearSession();
+      if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+      return null;
+    }
+  } catch {
+    return userInfo;
   }
 };
 

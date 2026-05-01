@@ -253,6 +253,18 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
+  // 페이지 진입 시 — 토큰 있고 userInfo 비어있으면 새로 받아본다.
+  // 옛 scope로 받은 토큰이면 자동으로 세션 정리되어 재로그인 유도됨.
+  useEffect(() => {
+    if (!drive.isEnabled()) return;
+    if (drive.getStatus() === 'signed-in' && !drive.getUser()) {
+      drive.refreshUserInfo().then(u => {
+        setUser(u);
+        setDriveStatus(drive.getStatus());
+      });
+    }
+  }, []);
+
   // Fetch holidays for selected month's year (cached, fallback to static)
   useEffect(() => {
     const year = Number(selectedMonth.split('-')[0]);
