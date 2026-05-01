@@ -32,6 +32,33 @@ const isStandalone = () =>
   (window.matchMedia('(display-mode: standalone)').matches) ||
   (navigator as any).standalone === true;
 
+const haptic = (ms: number) => {
+  try { (navigator as any).vibrate?.(ms); } catch {}
+};
+
+function CountUp({ value, decimals = 0, duration = 500 }: { value: number; decimals?: number; duration?: number }) {
+  const [display, setDisplay] = useState(value);
+  const prevRef = useRef(value);
+  useEffect(() => {
+    const start = prevRef.current;
+    const target = value;
+    if (start === target) { setDisplay(target); return; }
+    const startTime = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - startTime) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(start + (target - start) * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else prevRef.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [value, duration]);
+  const formatted = decimals === 0 ? Math.round(display).toString() : display.toFixed(decimals);
+  return <>{formatted}</>;
+}
+
 const calculateHours = (start: string, end: string) => {
   if (!start || !end) return 0;
   const [startH, startM] = start.split(':').map(Number);
@@ -94,7 +121,15 @@ export default function App() {
     if (meta) meta.setAttribute('content', colors[theme]);
   }, [theme]);
   const themeOrder: Theme[] = ['light', 'dark', 'pink', 'pastel'];
-  const cycleTheme = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % themeOrder.length]);
+  const cycleTheme = () => {
+    haptic(10);
+    const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % themeOrder.length]);
+    if ((document as any).startViewTransition) {
+      (document as any).startViewTransition(apply);
+    } else {
+      apply();
+    }
+  };
 
   // Pull-to-refresh: 스크롤 최상단에서 아래로 끌어 80px 이상 → 새로고침
   const [ptrDistance, setPtrDistance] = useState(0);
@@ -296,6 +331,7 @@ export default function App() {
     }
   }, [daysInMonth, schedule, selectedMonth, isDataLoaded]);
 
+  const [flashedDate, setFlashedDate] = useState<string | null>(null);
   const handleTimeChange = (dateString: string, field: 'start' | 'end' | 'type', value: string) => {
     setSchedule(prev => {
       const current = prev[dateString] || { start: '', end: '', type: 'normal' };
@@ -306,6 +342,9 @@ export default function App() {
       return { ...prev, [dateString]: newEntry };
     });
     setIsDirty(true);
+    haptic(15);
+    setFlashedDate(dateString);
+    setTimeout(() => setFlashedDate(p => (p === dateString ? null : p)), 700);
   };
 
   const dateOffset = (dateString: string, daysBack: number): string => {
@@ -514,6 +553,7 @@ export default function App() {
 
   const acceptNowPrompt = () => {
     if (!nowPrompt) return;
+    haptic(40);
     handleTimeChange(todayDateString, nowPrompt.kind, nowPrompt.time);
     setNowPromptDismissed(true);
   };
@@ -613,7 +653,7 @@ export default function App() {
             <div className="absolute -top-16 -right-16 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-20 -left-10 w-72 h-72 bg-fuchsia-300/20 rounded-full blur-3xl pointer-events-none" />
             <div className="flex items-start md:items-center gap-3 md:gap-4">
-              <div className="p-2 md:p-3 bg-white/20 rounded-xl shrink-0">
+              <div className="p-2 md:p-3 glass rounded-xl shrink-0 animate-float">
                 <Calendar className="w-6 h-6 md:w-8 md:h-8 text-white" />
               </div>
               <div className="min-w-0">
@@ -631,7 +671,7 @@ export default function App() {
                 type="month"
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-indigo-700 text-white border border-indigo-500 rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-white/50 w-auto max-w-full font-bold cursor-pointer text-base text-center shadow-sm self-start md:self-end"
+                className="glass text-white rounded-xl px-4 py-2.5 outline-none focus:ring-2 focus:ring-white/50 w-auto max-w-full font-bold cursor-pointer text-base text-center self-start md:self-end"
               />
               <div className="flex items-center gap-2 flex-wrap">
                 {drive.isEnabled() && driveStatus === 'signed-out' && (
@@ -752,7 +792,10 @@ export default function App() {
           {/* Content */}
           <div className="px-4 py-4 sm:p-6">
             <div className="space-y-2">
-              {daysInMonth.map((day) => {
+              {!isDataLoaded && Array.from({ length: 8 }).map((_, i) => (
+                <div key={`sk-${i}`} className="h-20 rounded-xl bg-gray-100 animate-pulse" />
+              ))}
+              {isDataLoaded && daysInMonth.map((day) => {
                 const isWeekend = day.isSunday || day.isSaturday;
                 const type = schedule[day.dateString]?.type || 'normal';
                 const isHolidayOrWeekend = isWeekend || type === 'holiday';
@@ -760,7 +803,10 @@ export default function App() {
                 const isToday = day.dateString === todayDateString;
 
                 let dayColor = 'text-gray-700';
-                let dotColor = 'bg-indigo-400';
+                // 평일별 도트 색상 다양화 (월·화·수·목·금)
+                const weekdayDots = ['', 'bg-indigo-400', 'bg-sky-400', 'bg-teal-400', 'bg-emerald-400', 'bg-violet-500', ''];
+                const dow = new Date(day.dateString + 'T00:00:00').getDay();
+                let dotColor = weekdayDots[dow] || 'bg-indigo-400';
 
                 if (isSpecialLeave) {
                   dayColor = 'text-pink-500';
@@ -784,13 +830,18 @@ export default function App() {
                   ? 'bg-gradient-to-b from-indigo-500 to-purple-500'
                   : 'bg-gradient-to-b from-indigo-300 to-indigo-200';
 
+                const showPattern = isToday || (isHolidayOrWeekend && type === 'holiday');
+                const isFlash = flashedDate === day.dateString;
                 return (
                   <div
                     key={day.dateString}
                     ref={isToday ? todayRef : null}
-                    className={`relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-3 p-3 pl-4 rounded-xl border transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 ${bgColor} ${borderColor} ${isToday ? 'z-10 relative shadow-lg' : ''}`}
+                    className={`shimmer-card relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-3 p-3 pl-4 rounded-xl border transition-all duration-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 ${bgColor} ${borderColor} ${isToday ? 'z-10 relative shadow-lg' : ''} ${isFlash ? 'animate-flash' : ''}`}
                   >
                     <div className={`absolute left-0 top-0 bottom-0 w-1 ${stripeColor}`} />
+                    {showPattern && (
+                      <div className={`bg-dots absolute inset-0 ${isToday ? 'text-indigo-500' : 'text-red-500'}`} />
+                    )}
                     <div className={`sm:w-44 font-medium flex items-center flex-wrap gap-x-2 gap-y-1 ${dayColor}`}>
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`}></span>
                       <span className="flex-shrink-0">{day.dayNumber}일 ({day.dayName})</span>
@@ -844,7 +895,7 @@ export default function App() {
                           <select
                             value={schedule[day.dateString]?.start || ''}
                             onChange={(e) => handleTimeChange(day.dateString, 'start', e.target.value)}
-                            className="block w-full pl-2 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white border appearance-none cursor-pointer"
+                            className={`block w-full pl-2 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white border appearance-none cursor-pointer ${!schedule[day.dateString]?.start && type === 'normal' && !isWeekend ? 'hint-empty' : ''}`}
                           >
                             <option value="">선택</option>
                             {(type === 'half-day' ? HALF_DAY_TIMES : (isWeekend ? WEEKEND_TIMES : START_TIMES)).map(time => (
@@ -865,7 +916,7 @@ export default function App() {
                               value={schedule[day.dateString]?.end || ''}
                               onChange={(e) => handleTimeChange(day.dateString, 'end', e.target.value)}
                               disabled={type === 'family'}
-                              className="block w-full pl-2 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white border appearance-none cursor-pointer disabled:bg-gray-50 disabled:text-gray-500"
+                              className={`block w-full pl-2 pr-8 py-1.5 text-sm border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 rounded-md bg-white border appearance-none cursor-pointer disabled:bg-gray-50 disabled:text-gray-500 ${!schedule[day.dateString]?.end && type === 'normal' && !isWeekend ? 'hint-empty' : ''}`}
                             >
                               <option value="">선택</option>
                               {(isWeekend ? WEEKEND_TIMES : END_TIMES).map(time => (
@@ -916,7 +967,7 @@ export default function App() {
                   </div>
                   <div className="flex flex-col">
                     <span className="text-xs text-gray-400">목표 근무 시간 (평일×8h)</span>
-                    <span className="text-lg font-medium text-gray-200">{targetMonthlyHours}시간</span>
+                    <span className="text-lg font-medium text-gray-200 num"><CountUp value={targetMonthlyHours} />시간</span>
                   </div>
                 </div>
               </div>
@@ -924,22 +975,25 @@ export default function App() {
               <div className="flex items-center gap-4 sm:gap-6 w-full sm:w-auto justify-between sm:justify-end border-t border-gray-700 sm:border-t-0 pt-3 sm:pt-0">
                 <div className="flex flex-col items-end">
                   <span className="text-xs text-gray-400">현재 누적 시간</span>
-                  <div className="text-xl sm:text-2xl font-bold text-indigo-300">
-                    {totalHours} <span className="text-sm font-medium text-gray-400">시간</span>
+                  <div className="text-xl sm:text-2xl font-bold text-indigo-300 num">
+                    <CountUp value={totalHours} decimals={Number.isInteger(totalHours) ? 0 : 1} /> <span className="text-sm font-medium text-gray-400">시간</span>
                   </div>
                 </div>
 
                 <div className="w-px h-10 bg-gray-700 hidden sm:block"></div>
 
                 <div className="flex flex-col items-end min-w-[80px]">
-                  <span className="text-xs text-gray-400">초과/부족</span>
+                  <span className="text-xs text-gray-400 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 animate-twinkle text-indigo-300" />
+                    초과/부족
+                  </span>
                   <div
-                    className={`text-xl sm:text-2xl ${diffWeight} ${diffPulse} ${
+                    className={`text-xl sm:text-2xl num ${diffWeight} ${diffPulse} ${
                       hoursDifference > 0 ? 'text-emerald-400' : hoursDifference === 0 ? 'text-gray-300' : ''
                     } transition-colors duration-300`}
                     style={diffStyle}
                   >
-                    {hoursDifference > 0 ? '+' : ''}{hoursDifference} <span className="text-sm font-medium text-gray-400">시간</span>
+                    {hoursDifference > 0 ? '+' : ''}<CountUp value={hoursDifference} decimals={Number.isInteger(hoursDifference) ? 0 : 1} /> <span className="text-sm font-medium text-gray-400">시간</span>
                   </div>
                 </div>
               </div>
