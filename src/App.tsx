@@ -527,6 +527,12 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
   };
 
   const handleSignOut = () => {
+    const ok = window.confirm(
+      '정말 로그아웃하시겠어요?\n\n' +
+      '• 로컬 데이터(이 기기에 저장된 입력)는 그대로 남습니다.\n' +
+      '• 다음 사용 시 Google 동기화를 위해 다시 로그인해야 합니다.'
+    );
+    if (!ok) return;
     drive.signOut();
     setUser(null);
     setDriveStatus(drive.getStatus());
@@ -1087,8 +1093,14 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                       <UserIcon className="w-4 h-4" />
                     )}
                     <span className="text-xs truncate max-w-[100px]">{user.name || user.email}</span>
-                    <button onClick={handleSignOut} className="text-indigo-200 hover:text-white">
+                    <button
+                      onClick={handleSignOut}
+                      className="flex items-center gap-1 text-indigo-100 hover:text-white hover:bg-white/10 rounded-md px-1.5 py-0.5 transition-colors"
+                      title="Google 로그아웃 (확인 후 진행)"
+                      aria-label="로그아웃"
+                    >
                       <LogOut className="w-3.5 h-3.5" />
+                      <span className="text-[11px] font-medium">로그아웃</span>
                     </button>
                   </div>
                 )}
