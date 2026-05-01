@@ -16,7 +16,11 @@ import {
   Moon,
   Copy,
   RotateCcw,
+  UserPlus,
 } from 'lucide-react';
+
+const ADMIN_EMAIL = 'go2god4u@gmail.com';
+const ADD_USER_URL = 'https://console.cloud.google.com/auth/audience?project=dongast-work-hours';
 import { motion, AnimatePresence } from 'framer-motion';
 import { START_TIMES, END_TIMES, WEEKEND_TIMES, HALF_DAY_TIMES } from './constants';
 import { loadMonth, saveMonth, exportAll, importAll, MonthSchedule, DayEntry } from './storage';
@@ -574,6 +578,18 @@ export default function App() {
                       <UserIcon className="w-4 h-4" />
                     )}
                     <span className="text-xs truncate max-w-[100px]">{user.name || user.email}</span>
+                    {user.email === ADMIN_EMAIL && (
+                      <a
+                        href={ADD_USER_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-indigo-200 hover:text-white"
+                        title="Google Cloud Console에서 테스트 사용자 Gmail 추가 (관리자 전용)"
+                        aria-label="사용자 추가"
+                      >
+                        <UserPlus className="w-3.5 h-3.5" />
+                      </a>
+                    )}
                     <button onClick={handleSignOut} className="text-indigo-200 hover:text-white">
                       <LogOut className="w-3.5 h-3.5" />
                     </button>
