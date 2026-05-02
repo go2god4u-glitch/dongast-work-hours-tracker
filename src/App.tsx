@@ -1187,6 +1187,16 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                 <h1 className="text-xl md:text-2xl font-bold truncate">{(() => {
                   const now = new Date();
                   const today = schedule[todayDateString];
+                  // 1. 오늘이 공휴일이면 공휴일 이름 표시
+                  const holidayName = holidays[todayDateString];
+                  if (holidayName) return `${holidayName} 🎉`;
+                  // 2. 휴가 / 패밀리데이는 유형 우선
+                  if (today?.type === 'vacation') return '즐거운 휴가 🏖️';
+                  if (today?.type === 'family') return '패밀리데이 💕';
+                  // 3. 토/일은 쉬는 날
+                  const dow = now.getDay();
+                  if (dow === 0 || dow === 6) return '오늘은 쉬는 날 😁';
+                  // 4. 평일 — 기존 카운트다운 로직
                   const endStr = today?.end;
                   if (endStr) {
                     const [eh, em] = endStr.split(':').map(Number);
