@@ -282,10 +282,9 @@ export const warmTokenClient = async () => {
 
 /** 디버그 / 테스트 — 토큰을 강제 만료시킴 (1시간 안 기다리고 흐름 확인용) */
 export const forceExpireForTest = () => {
-  if (accessToken) {
-    tokenExpiryMs = Date.now() - 1;
-    saveSession();
-  }
+  accessToken = null;
+  tokenExpiryMs = 0;
+  clearSession();
 };
 
 /** 토큰 만료 시각(ms) — 디버그용 */

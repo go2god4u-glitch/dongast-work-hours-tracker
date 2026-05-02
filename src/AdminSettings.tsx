@@ -24,9 +24,10 @@ interface Props {
   cfg: AppConfig;
   onSave: (cfg: AppConfig) => void;
   onClose: () => void;
+  onTestExpire?: () => void;
 }
 
-export default function AdminSettings({ cfg, onSave, onClose }: Props) {
+export default function AdminSettings({ cfg, onSave, onClose, onTestExpire }: Props) {
   const [draft, setDraft] = useState<AppConfig>(cfg);
 
   const update = <K extends keyof AppConfig>(key: K, value: AppConfig[K]) => {
@@ -186,7 +187,8 @@ export default function AdminSettings({ cfg, onSave, onClose }: Props) {
             <button
               onClick={() => {
                 drive.forceExpireForTest();
-                alert('토큰을 강제 만료시켰습니다.\n\n이 모달을 닫고 화면을 한 번 탭하세요.\n약 1~2초 후 동기화 뱃지가 정상으로 돌아오면 성공입니다.');
+                onTestExpire?.();
+                alert('토큰을 강제 만료시켰습니다.\n\n모달 닫으면 헤더에 노란 "동기화" 버튼이 나타납니다.\n그걸 누르면 Google로 이동 후 자동 복귀하며 sync 재개됩니다.');
               }}
               className="px-3 py-2 text-sm font-medium bg-amber-100 text-amber-900 hover:bg-amber-200 rounded-lg"
             >

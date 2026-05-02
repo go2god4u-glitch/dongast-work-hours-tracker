@@ -1099,6 +1099,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
           cfg={cfg}
           onSave={(next) => { setCfg(next); saveConfig(next); }}
           onClose={() => setShowAdminSettings(false)}
+          onTestExpire={() => setDriveStatus(drive.getStatus())}
         />
       )}
 
