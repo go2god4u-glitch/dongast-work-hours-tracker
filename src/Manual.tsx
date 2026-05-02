@@ -8,7 +8,7 @@
  *  4. 자동 계산 규칙 (휴게시간, 1.5배, 171시간 cascade)
  *  5. 빠른 입력 버튼 (📋 / ↺)
  *  6. "지금 출근/퇴근" 자동 안내
- *  7. 월말 회고 (📊)
+ *  7. 통계 (📊)
  *  8. 데이터 저장 (IndexedDB + Drive 격리)
  *  9. 색상 코드
  *  10. 테마 4종
@@ -83,10 +83,10 @@ export default function Manual() {
       </section>
 
       <section>
-        <h3 className="text-base font-bold mb-2">7. 월말 회고 (📊 버튼)</h3>
+        <h3 className="text-base font-bold mb-2">7. 통계 (📊 버튼)</h3>
         <ul className="list-disc pl-5 space-y-1">
           <li>헤더의 <b>📊 차트 아이콘</b> 클릭 → 이번 달 통계 모달</li>
-          <li>표시 내용: 누적/목표, 야근(<b>퇴근 18시 이후</b>) 일수, 최장 연속 출근, 평균 출근/퇴근 시각, 기록 일수</li>
+          <li>표시 내용: 누적/목표, 야근(<b>퇴근 18시 이후</b>) 일수, 평균 출근/퇴근 시각</li>
           <li>휴일·휴가 카운트 / 주별 누적 막대 차트 / 요일별 평균 막대 차트</li>
           <li>가장 빠른 출근 / 가장 늦은 퇴근 기록</li>
         </ul>

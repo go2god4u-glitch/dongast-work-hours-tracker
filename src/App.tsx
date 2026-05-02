@@ -90,7 +90,6 @@ import {
   BarChart3,
   Settings,
   TrendingUp,
-  Award,
   Coffee,
   Sunrise,
   Sunset,
@@ -995,7 +994,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
               <div className="sticky top-0 bg-gradient-to-r from-indigo-600 via-purple-600 to-fuchsia-500 text-white px-6 py-4 flex items-center justify-between rounded-t-3xl z-10">
                 <div className="flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
-                  <h2 className="text-lg font-bold">{selectedMonth} 회고</h2>
+                  <h2 className="text-lg font-bold">{selectedMonth} 통계</h2>
                 </div>
                 <button onClick={() => setShowRecap(false)} className="p-1.5 hover:bg-white/20 rounded-lg" aria-label="닫기">
                   <X className="w-5 h-5" />
@@ -1015,11 +1014,6 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                     <div className="text-xl font-bold num text-amber-900">{recap.overtimeDays}<span className="text-xs font-medium ml-0.5">일</span></div>
                     <div className="text-[10px] text-amber-600 mt-0.5">퇴근 18시 이후</div>
                   </div>
-                  <div className="rounded-xl bg-emerald-50 p-3">
-                    <div className="text-xs text-emerald-700 mb-1 flex items-center gap-1"><Award className="w-3 h-3" /> 연속 출근</div>
-                    <div className="text-xl font-bold num text-emerald-900">{recap.maxStreak}<span className="text-xs font-medium ml-0.5">일</span></div>
-                    <div className="text-[10px] text-emerald-600 mt-0.5">최장 streak</div>
-                  </div>
                   <div className="rounded-xl bg-sky-50 p-3">
                     <div className="text-xs text-sky-700 mb-1 flex items-center gap-1"><Sunrise className="w-3 h-3" /> 평균 출근</div>
                     <div className="text-xl font-bold num text-sky-900">{recap.avgStart > 0 ? recap.fmtMin(recap.avgStart) : '-'}</div>
@@ -1027,11 +1021,6 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                   <div className="rounded-xl bg-rose-50 p-3">
                     <div className="text-xs text-rose-700 mb-1 flex items-center gap-1"><Sunset className="w-3 h-3" /> 평균 퇴근</div>
                     <div className="text-xl font-bold num text-rose-900">{recap.avgEnd > 0 ? recap.fmtMin(recap.avgEnd) : '-'}</div>
-                  </div>
-                  <div className="rounded-xl bg-purple-50 p-3">
-                    <div className="text-xs text-purple-700 mb-1">기록 일수</div>
-                    <div className="text-xl font-bold num text-purple-900">{recap.enteredDays}<span className="text-xs font-medium ml-0.5">일</span></div>
-                    <div className="text-[10px] text-purple-600 mt-0.5">출/퇴근 모두 입력</div>
                   </div>
                 </div>
 
@@ -1282,8 +1271,8 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                 <button
                   onClick={() => setShowRecap(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-800/50 hover:bg-indigo-800 rounded-lg text-xs font-medium transition-colors"
-                  title="이번 달 회고"
-                  aria-label="이번 달 회고"
+                  title="이번 달 통계"
+                  aria-label="이번 달 통계"
                 >
                   <BarChart3 className="w-3.5 h-3.5" />
                 </button>
