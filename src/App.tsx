@@ -321,29 +321,30 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
-  // 자동 silent refresh — 토큰 만료('expired') 상태면 사용자 모르게 다시 받아옴.
-  // iOS Safari ITP가 막을 수 있으므로 여러 트리거에 걸어 성공 확률을 최대화:
-  //  - 마운트 시
-  //  - 탭 보임 (visibilitychange visible)
-  //  - 창 포커스 (focus)
-  //  - 60초마다 (만료 상태일 때만 실제 시도)
-  // 사용자에게 재인증 버튼/배너 안 보임. 모두 백그라운드 처리.
+  // 자동 silent refresh — 사용자 제스처(터치/클릭) 시점에만 시도.
+  // setInterval/마운트/visibilitychange는 "제스처 없는 호출"이라 iOS Safari가
+  // GIS의 fallback 팝업을 차단하면서 "팝업 허용/차단" 다이얼로그를 띄움.
+  // 그래서 모든 자동 트리거 제거하고, 사용자가 무언가 탭/클릭한 순간에만 시도.
+  // (그 순간은 정상 제스처라 브라우저가 차단 다이얼로그 없이 통과시킴)
   useEffect(() => {
     if (!drive.isEnabled()) return;
 
     let busy = false;
+    let lastAt = 0;
     const trySilent = async () => {
       if (busy) return;
+      // 5초 throttle — 잦은 탭에서 중복 호출 방지
+      if (Date.now() - lastAt < 5000) return;
       const status = drive.getStatus();
       if (status === 'signed-in' && !drive.getUser()) {
-        busy = true;
+        busy = true; lastAt = Date.now();
         await drive.refreshUserInfo();
         setUser(drive.getUser());
         busy = false;
         return;
       }
       if (status !== 'expired') return;
-      busy = true;
+      busy = true; lastAt = Date.now();
       const ok = await drive.trySilentRefresh();
       if (ok) {
         setUser(drive.getUser());
@@ -352,18 +353,11 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
       busy = false;
     };
 
-    trySilent();
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') trySilent();
-    };
-    const onFocus = () => trySilent();
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', onFocus);
-    const interval = setInterval(trySilent, 60 * 1000);
+    // 사용자 탭/클릭 시에만 트리거 (정상 user gesture context)
+    const onPointer = () => trySilent();
+    document.addEventListener('pointerdown', onPointer, { passive: true });
     return () => {
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', onFocus);
-      clearInterval(interval);
+      document.removeEventListener('pointerdown', onPointer);
     };
   }, []);
 
