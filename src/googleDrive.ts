@@ -171,7 +171,9 @@ const requestToken = (prompt: '' | 'consent' = ''): Promise<string> =>
 
 const ensureToken = async (): Promise<string> => {
   if (accessToken && Date.now() < tokenExpiryMs) return accessToken;
-  return await requestToken('');
+  // 토큰 만료/없음 시 자동 갱신 시도하지 않음 — iOS popup 차단 다이얼로그 회피.
+  // 사용자가 명시적으로 로그아웃 → 로그인 하면 새 토큰 받음.
+  throw new Error('TOKEN_EXPIRED');
 };
 
 const fetchUserInfo = async (token: string): Promise<UserInfo | null> => {
