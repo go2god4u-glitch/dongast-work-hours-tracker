@@ -6,11 +6,14 @@
  *  [편의 기능]    5. 빠른 입력 / 6. 통계 / 7. 헤더 타이틀
  *  [화면/꾸밈]    8. 색상 / 9. 빈 입력 / 10. 테마
  *  [처음 설치]    11. PWA / 12. Pull-to-refresh
- *  [관리/기술]    13. 데이터 저장 / 14. 관리자 사용자 추가
+ *  [관리/기술]    13. 데이터 저장 / 14. 관리자 사용자 추가  ← isAdmin=true일 때만 표시
  *
  * 매뉴얼 내용 수정 시 이 파일만 편집.
  */
-export default function Manual() {
+interface ManualProps {
+  isAdmin?: boolean;
+}
+export default function Manual({ isAdmin = false }: ManualProps) {
   return (
     <>
       {/* ───── 핵심 사용 ───── */}
@@ -142,27 +145,42 @@ export default function Manual() {
         </ul>
       </section>
 
-      {/* ───── 관리 / 기술 ───── */}
-      <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider pt-2">관리 / 기술 (참고)</div>
+      {/* ───── 관리 / 기술 — 관리자에게만 표시 ───── */}
+      {isAdmin && (
+        <>
+          <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider pt-2 border-t border-gray-100">⚙ 관리자 전용</div>
 
-      <section>
-        <h3 className="text-base font-bold mb-2">13. 데이터 저장</h3>
-        <ul className="list-disc pl-5 space-y-1">
-          <li><b>로컬 (IndexedDB)</b>: 항상 자동 저장. 이 브라우저에서만 접근</li>
-          <li><b>Google Drive 동기화</b>: 헤더의 "Google 로그인" 클릭 → 본인 Drive의 앱 전용 폴더에 자동 백업. 다른 기기에서 같은 계정 로그인 시 자동 다운로드</li>
-          <li>일자별 modifiedAt 기반 충돌 병합 — 두 기기에서 동시 수정 시 더 최근 변경이 이김</li>
-          <li>같이 쓰는 사용자는 각자 본인 Drive에만 저장 (서로 격리)</li>
-        </ul>
-      </section>
+          <section>
+            <h3 className="text-base font-bold mb-2">13. 데이터 저장 구조</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><b>로컬 (IndexedDB)</b>: 항상 자동 저장. 이 브라우저에서만 접근</li>
+              <li><b>Google Drive 동기화</b>: 본인 Drive의 앱 전용 폴더(appDataFolder)에 자동 백업. 다른 기기에서 같은 계정 로그인 시 자동 다운로드</li>
+              <li>일자별 modifiedAt 기반 충돌 병합 — 두 기기에서 동시 수정 시 더 최근 변경이 이김</li>
+              <li>각 사용자는 각자 본인 Drive에만 저장 (서로 격리, 관리자도 다른 사람 데이터 못 봄)</li>
+              <li>1시간 토큰 만료 시 OAuth implicit grant + redirect 흐름으로 무인지 갱신</li>
+            </ul>
+          </section>
 
-      <section>
-        <h3 className="text-base font-bold mb-2">14. 관리자 — 사용자 추가</h3>
-        <ul className="list-disc pl-5 space-y-1">
-          <li>헤더의 <b>👤➕ 버튼</b> 클릭 → Google Cloud Console "테스트 사용자" 페이지 열림</li>
-          <li>같이 쓸 직원의 Gmail을 추가 (테스트 모드 최대 100명, 무료)</li>
-          <li>관리자(앱 소유자) 계정만 권한 있음 — 다른 사용자가 눌러도 Google이 자동 차단</li>
-        </ul>
-      </section>
+          <section>
+            <h3 className="text-base font-bold mb-2">14. 관리자 — 사용자 추가</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>헤더의 <b>👤➕ 버튼</b> 클릭 → Google Cloud Console "테스트 사용자" 페이지 열림</li>
+              <li>같이 쓸 직원의 Gmail을 추가 (테스트 모드 최대 100명, 무료)</li>
+              <li>다른 사용자에겐 이 버튼 자체가 보이지 않음</li>
+            </ul>
+          </section>
+
+          <section>
+            <h3 className="text-base font-bold mb-2">15. 회사 정책 설정</h3>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>헤더의 <b>⚙️ 버튼</b>으로 모달 열기</li>
+              <li>월 상한 / 일일 시간 / 시간 단위 / 휴게·가산 / 캡 차감 룰 / 시간 범위 / 유형 토글 모두 변경 가능</li>
+              <li>다른 회사 사용 시 정책에 맞게 한 번만 설정하면 끝</li>
+              <li>"기본값으로" 버튼으로 일괄 리셋, "토큰 강제 만료(테스트)" 버튼으로 동기화 흐름 검증</li>
+            </ul>
+          </section>
+        </>
+      )}
 
       <section className="text-xs text-gray-500 pt-3 border-t border-gray-100">
         문의 / 버그: <a href="https://github.com/go2god4u-glitch/dongast-work-hours-tracker/issues" className="underline" target="_blank" rel="noopener noreferrer">GitHub Issues</a>

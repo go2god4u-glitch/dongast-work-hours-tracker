@@ -1126,7 +1126,7 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
               </button>
             </div>
             <div className="px-6 py-5 space-y-6 text-sm leading-relaxed text-gray-700">
-              <Manual />
+              <Manual isAdmin={(user?.email || '').trim().toLowerCase() === ADMIN_EMAIL.toLowerCase()} />
             </div>
           </div>
         </div>
