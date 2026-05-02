@@ -331,6 +331,14 @@ export const startSilentRedirectAuth = (): boolean => {
   return true;
 };
 
+/** 사용자가 명시적으로 누른 "동기화" 버튼 — 항상 시도, 세션 플래그 무시 */
+export const startManualSyncRedirect = (): boolean => {
+  if (!clientId) return false;
+  try { sessionStorage.removeItem(REDIRECT_TRIED_KEY); } catch {}
+  window.location.href = buildAuthUrl('none');
+  return true;
+};
+
 /** 사용자 명시적 재로그인 — 페이지 redirect 방식, popup 안 씀 */
 export const startConsentRedirectAuth = (): boolean => {
   if (!clientId) return false;

@@ -320,14 +320,11 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
-  // OAuth redirect 흐름 처리
-  // 1) Google에서 redirect되어 돌아온 거면 hash에서 토큰 추출
-  // 2) 'expired' 상태면 silent redirect 1회 시도 (세션당 1번만, 무한루프 방지)
-  // 3) signed-in인데 user 정보 없으면 fetch
+  // OAuth redirect 콜백 처리만 — 자동 redirect는 안 함 (수동 동기화 모드)
+  // 사용자가 명시적으로 "동기화" 버튼 누르면 redirect 흐름 시작.
   useEffect(() => {
     if (!drive.isEnabled()) return;
 
-    // Step 1: redirect callback
     const returned = drive.handleAuthRedirectCallback();
     if (returned) {
       setUser(drive.getUser());
@@ -335,13 +332,6 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
       return;
     }
 
-    // Step 2: 만료 상태면 silent redirect
-    if (drive.getStatus() === 'expired') {
-      const ok = drive.startSilentRedirectAuth();
-      if (ok) return; // 페이지가 곧 redirect됨
-    }
-
-    // Step 3: signed-in인데 user 정보 비어있으면
     if (drive.getStatus() === 'signed-in' && !drive.getUser()) {
       drive.refreshUserInfo().then(u => setUser(u));
     }
@@ -936,7 +926,13 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
         </span>
       );
     }
-    // 'expired'는 사용자에게 안 보임 — 백그라운드에서 자동 silent refresh 시도
+    if (driveStatus === 'expired') {
+      return (
+        <span className="flex items-center gap-1 text-xs text-amber-200">
+          <CloudOff className="w-3.5 h-3.5" /> 동기화 필요
+        </span>
+      );
+    }
     if (syncState === 'syncing') {
       return (
         <span className="flex items-center gap-1 text-xs text-indigo-100">
@@ -1221,6 +1217,17 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                       <UserIcon className="w-4 h-4" />
                     )}
                     <span className="text-xs truncate max-w-[140px]" title={user.email}>{user.email || user.name}</span>
+                    {driveStatus === 'expired' && (
+                      <button
+                        onClick={() => drive.startManualSyncRedirect()}
+                        className="flex items-center gap-1 bg-amber-400 text-amber-900 hover:bg-amber-300 rounded-md px-2 py-0.5 transition-colors"
+                        title="Drive 동기화 — Google로 이동 후 자동 복귀"
+                        aria-label="동기화"
+                      >
+                        <Cloud className="w-3.5 h-3.5" />
+                        <span className="text-[11px] font-bold">동기화</span>
+                      </button>
+                    )}
                     <button
                       onClick={handleSignOut}
                       className="flex items-center gap-1 text-indigo-100 hover:text-white hover:bg-white/10 rounded-md px-1.5 py-0.5 transition-colors"
