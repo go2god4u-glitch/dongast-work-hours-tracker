@@ -321,44 +321,14 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
-  // 자동 silent refresh — 사용자 제스처(터치/클릭) 시점에만 시도.
-  // setInterval/마운트/visibilitychange는 "제스처 없는 호출"이라 iOS Safari가
-  // GIS의 fallback 팝업을 차단하면서 "팝업 허용/차단" 다이얼로그를 띄움.
-  // 그래서 모든 자동 트리거 제거하고, 사용자가 무언가 탭/클릭한 순간에만 시도.
-  // (그 순간은 정상 제스처라 브라우저가 차단 다이얼로그 없이 통과시킴)
+  // 사용자 정보가 비어있으면 한 번만 silent로 보강 (signed-in 상태에서만).
+  // 'expired' 상태에서는 자동 갱신을 시도하지 않음 — iOS Safari가 popup 차단 다이얼로그를
+  // 띄우는 원인이기 때문. 사용자가 명시적으로 로그아웃/로그인 하면 정상 복구됨.
   useEffect(() => {
     if (!drive.isEnabled()) return;
-
-    let busy = false;
-    let lastAt = 0;
-    const trySilent = async () => {
-      if (busy) return;
-      // 5초 throttle — 잦은 탭에서 중복 호출 방지
-      if (Date.now() - lastAt < 5000) return;
-      const status = drive.getStatus();
-      if (status === 'signed-in' && !drive.getUser()) {
-        busy = true; lastAt = Date.now();
-        await drive.refreshUserInfo();
-        setUser(drive.getUser());
-        busy = false;
-        return;
-      }
-      if (status !== 'expired') return;
-      busy = true; lastAt = Date.now();
-      const ok = await drive.trySilentRefresh();
-      if (ok) {
-        setUser(drive.getUser());
-        setDriveStatus(drive.getStatus());
-      }
-      busy = false;
-    };
-
-    // 사용자 탭/클릭 시에만 트리거 (정상 user gesture context)
-    const onPointer = () => trySilent();
-    document.addEventListener('pointerdown', onPointer, { passive: true });
-    return () => {
-      document.removeEventListener('pointerdown', onPointer);
-    };
+    if (drive.getStatus() === 'signed-in' && !drive.getUser()) {
+      drive.refreshUserInfo().then(u => setUser(u));
+    }
   }, []);
 
   // Fetch holidays for selected month's year (cached, fallback to static)

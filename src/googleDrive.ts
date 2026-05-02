@@ -112,32 +112,12 @@ const restoreUser = () => {
 restoreUser();
 restoreSession();
 
-// === 자동 토큰 갱신 (만료 5분 전 silent refresh) ===
-// 사용자가 매 시간 다시 로그인하지 않도록 백그라운드에서 새 토큰을 받아둠.
-// 사용자가 Google에 여전히 로그인되어 있고 동의를 유지하는 한 클릭 없이 갱신됨.
+// 자동 토큰 갱신 비활성화.
+// iOS Safari가 사용자 제스처 없는 setTimeout 콜백에서 GIS의 popup fallback을 차단하면
+// "팝업 윈도우 열기 — 차단/허용" 다이얼로그를 띄우기 때문.
+// 만료 후엔 'expired' 상태로 두고, 사용자가 명시적으로 로그아웃/로그인 하거나
+// 새 입력 push가 401 받았을 때 사용자 제스처 컨텍스트에서 처리하도록 함.
 let refreshTimer: number | null = null;
-const scheduleRefresh = () => {
-  if (refreshTimer) {
-    clearTimeout(refreshTimer);
-    refreshTimer = null;
-  }
-  if (!accessToken || !tokenExpiryMs) return;
-  const ms = tokenExpiryMs - Date.now() - 5 * 60 * 1000;
-  if (ms <= 0) return; // 이미 곧 만료 — 다음 ensureToken 시 자동 처리
-  refreshTimer = window.setTimeout(async () => {
-    try {
-      await requestToken('');
-    } catch (e) {
-      console.warn('Silent token refresh failed; will retry on next API call.', e);
-      // 실패 시 다음 API 호출 때 prompt 띄우거나 사용자 클릭 유도
-    }
-  }, ms);
-};
-// 복원된 세션이 있으면 즉시 갱신 스케줄
-if (accessToken) {
-  // 모듈 init 직후엔 window.setTimeout 사용 가능 (브라우저 환경 가정)
-  setTimeout(scheduleRefresh, 0);
-}
 
 export const isEnabled = () => !!clientId;
 
@@ -177,7 +157,6 @@ const requestToken = (prompt: '' | 'consent' = ''): Promise<string> =>
       accessToken = resp.access_token;
       tokenExpiryMs = Date.now() + (Number(resp.expires_in || 3600) - 60) * 1000;
       saveSession();
-      scheduleRefresh();
       resolve(accessToken!);
     };
     try {
