@@ -307,9 +307,11 @@ const getRedirectUri = () => window.location.origin + window.location.pathname;
 const buildAuthUrl = (prompt: 'none' | 'consent') => {
   const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
   try { sessionStorage.setItem(REDIRECT_STATE_KEY, state); } catch {}
+  const redirectUri = getRedirectUri();
+  console.log('[redirect-auth] redirect_uri:', redirectUri);
   const params = new URLSearchParams({
     client_id: clientId!,
-    redirect_uri: getRedirectUri(),
+    redirect_uri: redirectUri,
     response_type: 'token',
     scope: SCOPE,
     state,
@@ -319,6 +321,9 @@ const buildAuthUrl = (prompt: 'none' | 'consent') => {
   if (userInfo?.email) params.set('login_hint', userInfo.email);
   return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
 };
+
+/** 현재 앱이 사용 중인 redirect URI 반환 — Google Cloud Console에 등록해야 하는 값 */
+export const getRedirectUriForRegistration = () => getRedirectUri();
 
 /** 'expired' 상태에서 silent redirect 시도. 같은 세션에서 한 번만. */
 export const startSilentRedirectAuth = (): boolean => {
@@ -331,11 +336,11 @@ export const startSilentRedirectAuth = (): boolean => {
   return true;
 };
 
-/** 사용자가 명시적으로 누른 "동기화" 버튼 — 항상 시도, 세션 플래그 무시 */
+/** 사용자가 명시적으로 누른 "동기화" 버튼 — consent 흐름 사용 (새 scope 동의 가능) */
 export const startManualSyncRedirect = (): boolean => {
   if (!clientId) return false;
   try { sessionStorage.removeItem(REDIRECT_TRIED_KEY); } catch {}
-  window.location.href = buildAuthUrl('none');
+  window.location.href = buildAuthUrl('consent');
   return true;
 };
 

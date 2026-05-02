@@ -1219,7 +1219,11 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
                     <span className="text-xs truncate max-w-[140px]" title={user.email}>{user.email || user.name}</span>
                     {driveStatus === 'expired' && (
                       <button
-                        onClick={() => drive.startManualSyncRedirect()}
+                        onClick={() => {
+                          const uri = drive.getRedirectUriForRegistration();
+                          console.log('[manual-sync] using redirect_uri:', uri);
+                          drive.startManualSyncRedirect();
+                        }}
                         className="flex items-center gap-1 bg-amber-400 text-amber-900 hover:bg-amber-300 rounded-md px-2 py-0.5 transition-colors"
                         title="Drive 동기화 — Google로 이동 후 자동 복귀"
                         aria-label="동기화"
