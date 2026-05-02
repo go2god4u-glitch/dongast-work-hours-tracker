@@ -321,14 +321,38 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
-  // 사용자 정보가 비어있으면 한 번만 silent로 보강 (signed-in 상태에서만).
-  // 'expired' 상태에서는 자동 갱신을 시도하지 않음 — iOS Safari가 popup 차단 다이얼로그를
-  // 띄우는 원인이기 때문. 사용자가 명시적으로 로그아웃/로그인 하면 정상 복구됨.
+  // GIS lib + tokenClient를 mount 시점에 미리 warmup → 이후 user gesture에서 동기 호출 가능
   useEffect(() => {
     if (!drive.isEnabled()) return;
+    drive.warmTokenClient();
     if (drive.getStatus() === 'signed-in' && !drive.getUser()) {
       drive.refreshUserInfo().then(u => setUser(u));
     }
+  }, []);
+
+  // 사용자 탭 시 동기적으로 silent refresh 시도 — user gesture 보존이 핵심.
+  // await 체인 없이 즉시 tokenClient.requestAccessToken 호출 → iOS popup 차단 안 뜸.
+  // 30초 throttle로 중복 호출 방지.
+  useEffect(() => {
+    if (!drive.isEnabled()) return;
+    let lastAt = 0;
+    const onPointer = () => {
+      if (Date.now() - lastAt < 30000) return;
+      const status = drive.getStatus();
+      if (status !== 'expired') return;
+      lastAt = Date.now();
+      // 동기 호출 — 핵심: 여기서 await 절대 사용 금지
+      const dispatched = drive.requestSilentSync();
+      if (dispatched) {
+        // GIS callback이 비동기로 토큰을 채우면 잠시 후 status 갱신
+        setTimeout(() => {
+          setUser(drive.getUser());
+          setDriveStatus(drive.getStatus());
+        }, 1500);
+      }
+    };
+    document.addEventListener('pointerdown', onPointer, { passive: true });
+    return () => document.removeEventListener('pointerdown', onPointer);
   }, []);
 
   // Fetch holidays for selected month's year (cached, fallback to static)

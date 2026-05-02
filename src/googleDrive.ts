@@ -171,8 +171,8 @@ const requestToken = (prompt: '' | 'consent' = ''): Promise<string> =>
 
 const ensureToken = async (): Promise<string> => {
   if (accessToken && Date.now() < tokenExpiryMs) return accessToken;
-  // 토큰 만료/없음 시 자동 갱신 시도하지 않음 — iOS popup 차단 다이얼로그 회피.
-  // 사용자가 명시적으로 로그아웃 → 로그인 하면 새 토큰 받음.
+  // 토큰 만료/없음 → 자동 갱신 안 함 (iOS popup 회피). throw로 종료.
+  // user-gesture 컨텍스트에서 토큰 받으려면 requestSilentSync()를 별도로 호출.
   throw new Error('TOKEN_EXPIRED');
 };
 
@@ -242,6 +242,54 @@ export const getStatus = (): DriveStatus => {
   if (userInfo) return 'expired'; // 토큰 만료지만 사용자 식별 정보는 남아있음 — 1탭 재인증 가능
   return 'signed-out';
 };
+
+/**
+ * 동기 silent refresh — 사용자 제스처 핸들러 안에서 호출되어야 함.
+ * await 없이 즉시 tokenClient.requestAccessToken을 호출해 user gesture를 보존.
+ * iOS Safari가 popup 차단 다이얼로그를 띄우지 않게 하는 핵심.
+ *
+ * @returns 성공적으로 dispatch 됐으면 true, tokenClient 준비 안 됐으면 false.
+ */
+export const requestSilentSync = (): boolean => {
+  if (!clientId || !tokenClient) return false;
+  tokenClient.callback = (resp: any) => {
+    if (resp.error) {
+      console.warn('[silentSync] failed:', resp.error);
+      return;
+    }
+    accessToken = resp.access_token;
+    tokenExpiryMs = Date.now() + (Number(resp.expires_in || 3600) - 60) * 1000;
+    saveSession();
+    // userInfo 비어있으면 fetch — 결과는 다음 렌더에 반영
+    if (!userInfo && accessToken) {
+      fetchUserInfo(accessToken).then(u => { if (u) { userInfo = u; persistUser(); } });
+    }
+  };
+  try {
+    const args: any = { prompt: '' };
+    if (userInfo?.email) args.hint = userInfo.email;
+    tokenClient.requestAccessToken(args);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** App mount 시 호출 — GIS lib 로드 + tokenClient 초기화. 한 번만. */
+export const warmTokenClient = async () => {
+  await ensureTokenClient();
+};
+
+/** 디버그 / 테스트 — 토큰을 강제 만료시킴 (1시간 안 기다리고 흐름 확인용) */
+export const forceExpireForTest = () => {
+  if (accessToken) {
+    tokenExpiryMs = Date.now() - 1;
+    saveSession();
+  }
+};
+
+/** 토큰 만료 시각(ms) — 디버그용 */
+export const getExpiryMs = () => tokenExpiryMs;
 
 /** 백그라운드용 — silent re-auth만 시도. 실패해도 조용히 무시 (사용자에게 안 보임). */
 export const trySilentRefresh = async (): Promise<boolean> => {

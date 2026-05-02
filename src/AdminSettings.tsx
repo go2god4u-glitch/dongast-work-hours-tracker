@@ -16,8 +16,9 @@
  * 다른 회사가 사용할 때: 관리자가 본인 회사 정책에 맞게 한 번만 설정하면 끝.
  */
 import { useState } from 'react';
-import { X, Settings, RotateCcw } from 'lucide-react';
+import { X, Settings, RotateCcw, AlertCircle } from 'lucide-react';
 import { AppConfig, DEFAULT_CONFIG, resetConfig } from './config';
+import * as drive from './googleDrive';
 
 interface Props {
   cfg: AppConfig;
@@ -173,6 +174,24 @@ export default function AdminSettings({ cfg, onSave, onClose }: Props) {
                 ))}
               </select>
             </label>
+          </section>
+
+          <section className="pt-3 border-t border-gray-100">
+            <h3 className="text-base font-bold mb-2 flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> 테스트 도구</h3>
+            <p className="text-[11px] text-gray-500 mb-2">
+              토큰 만료 후 자동 갱신이 잘 되는지 검증할 때 사용.
+              누르면 토큰이 만료된 것처럼 처리됨 → 모달 닫고 화면을 한 번 탭하면 백그라운드에서 silent refresh 시도.
+              성공 시 헤더의 동기화 뱃지가 다시 "Drive 동기화 중"으로 돌아감.
+            </p>
+            <button
+              onClick={() => {
+                drive.forceExpireForTest();
+                alert('토큰을 강제 만료시켰습니다.\n\n이 모달을 닫고 화면을 한 번 탭하세요.\n약 1~2초 후 동기화 뱃지가 정상으로 돌아오면 성공입니다.');
+              }}
+              className="px-3 py-2 text-sm font-medium bg-amber-100 text-amber-900 hover:bg-amber-200 rounded-lg"
+            >
+              토큰 강제 만료 (테스트)
+            </button>
           </section>
 
           <section className="pt-3 border-t border-gray-100 flex gap-2">
