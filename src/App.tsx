@@ -321,9 +321,28 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     return () => { cancelled = true; };
   }, [selectedMonth]);
 
-  // 사용자 정보 비어있으면 한 번만 silent로 보강 (signed-in 상태에서만)
+  // OAuth redirect 흐름 처리
+  // 1) Google에서 redirect되어 돌아온 거면 hash에서 토큰 추출
+  // 2) 'expired' 상태면 silent redirect 1회 시도 (세션당 1번만, 무한루프 방지)
+  // 3) signed-in인데 user 정보 없으면 fetch
   useEffect(() => {
     if (!drive.isEnabled()) return;
+
+    // Step 1: redirect callback
+    const returned = drive.handleAuthRedirectCallback();
+    if (returned) {
+      setUser(drive.getUser());
+      setDriveStatus(drive.getStatus());
+      return;
+    }
+
+    // Step 2: 만료 상태면 silent redirect
+    if (drive.getStatus() === 'expired') {
+      const ok = drive.startSilentRedirectAuth();
+      if (ok) return; // 페이지가 곧 redirect됨
+    }
+
+    // Step 3: signed-in인데 user 정보 비어있으면
     if (drive.getStatus() === 'signed-in' && !drive.getUser()) {
       drive.refreshUserInfo().then(u => setUser(u));
     }

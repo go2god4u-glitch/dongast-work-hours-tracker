@@ -291,6 +291,90 @@ export const forceExpireForTest = () => {
 /** 토큰 만료 시각(ms) — 디버그용 */
 export const getExpiryMs = () => tokenExpiryMs;
 
+// === Redirect-based OAuth (popup 우회) ===
+// iOS PWA standalone에서 popup이 막혀서 GIS의 popup fallback이 차단 다이얼로그를 띄움.
+// 이를 우회하기 위해 OAuth implicit grant flow를 페이지 redirect 방식으로 직접 구현.
+// 1) 만료된 사용자가 앱에 들어오면, 우리가 직접 https://accounts.google.com/o/oauth2/v2/auth로 리다이렉트
+// 2) prompt=none으로 silent — 구글에 이미 로그인되어 있으면 즉시 토큰 들어있는 hash로 redirect 돌아옴
+// 3) handleAuthRedirectCallback이 hash에서 토큰을 꺼내 저장
+// 4) popup 자체를 안 쓰니 차단 다이얼로그 절대 안 뜸
+
+const REDIRECT_STATE_KEY = 'oauth_redirect_state';
+const REDIRECT_TRIED_KEY = 'oauth_redirect_tried';
+
+const getRedirectUri = () => window.location.origin + window.location.pathname;
+
+const buildAuthUrl = (prompt: 'none' | 'consent') => {
+  const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  try { sessionStorage.setItem(REDIRECT_STATE_KEY, state); } catch {}
+  const params = new URLSearchParams({
+    client_id: clientId!,
+    redirect_uri: getRedirectUri(),
+    response_type: 'token',
+    scope: SCOPE,
+    state,
+    prompt,
+    include_granted_scopes: 'true',
+  });
+  if (userInfo?.email) params.set('login_hint', userInfo.email);
+  return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
+};
+
+/** 'expired' 상태에서 silent redirect 시도. 같은 세션에서 한 번만. */
+export const startSilentRedirectAuth = (): boolean => {
+  if (!clientId) return false;
+  try {
+    if (sessionStorage.getItem(REDIRECT_TRIED_KEY) === '1') return false;
+    sessionStorage.setItem(REDIRECT_TRIED_KEY, '1');
+  } catch {}
+  window.location.href = buildAuthUrl('none');
+  return true;
+};
+
+/** 사용자 명시적 재로그인 — 페이지 redirect 방식, popup 안 씀 */
+export const startConsentRedirectAuth = (): boolean => {
+  if (!clientId) return false;
+  window.location.href = buildAuthUrl('consent');
+  return true;
+};
+
+/** 앱 부팅 시 호출 — Google에서 redirect되어 돌아왔는지 hash로 체크하고 토큰 저장 */
+export const handleAuthRedirectCallback = (): boolean => {
+  const hash = window.location.hash;
+  if (!hash || (!hash.includes('access_token=') && !hash.includes('error='))) return false;
+
+  const params = new URLSearchParams(hash.slice(1));
+  const tok = params.get('access_token');
+  const expiresIn = Number(params.get('expires_in') || 3600);
+  const error = params.get('error');
+  const stateReturned = params.get('state');
+
+  let savedState = '';
+  try { savedState = sessionStorage.getItem(REDIRECT_STATE_KEY) || ''; } catch {}
+  try { sessionStorage.removeItem(REDIRECT_STATE_KEY); } catch {}
+
+  // URL 정리 — 토큰 잔재가 주소창에 남지 않게
+  try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch {}
+
+  if (error) {
+    console.warn('[redirect-auth] Google returned error:', error);
+    return false;
+  }
+  if (!tok || stateReturned !== savedState) {
+    console.warn('[redirect-auth] state mismatch or no token');
+    return false;
+  }
+
+  accessToken = tok;
+  tokenExpiryMs = Date.now() + (expiresIn - 60) * 1000;
+  saveSession();
+  // Fire-and-forget userInfo fetch
+  fetchUserInfo(tok).then(u => { if (u) { userInfo = u; persistUser(); } });
+  // 성공했으니 다시 시도 안 하도록 플래그도 정리
+  try { sessionStorage.removeItem(REDIRECT_TRIED_KEY); } catch {}
+  return true;
+};
+
 /** 백그라운드용 — silent re-auth만 시도. 실패해도 조용히 무시 (사용자에게 안 보임). */
 export const trySilentRefresh = async (): Promise<boolean> => {
   if (!clientId) return false;
