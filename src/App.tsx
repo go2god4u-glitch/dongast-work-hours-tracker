@@ -752,10 +752,12 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
 
   /**
    * "지금 출근/퇴근" 1-탭 기록 안내.
-   * - 평일이고 오늘 날짜가 현재 보고 있는 월에 속할 때만
-   * - 휴일/휴가/패밀리/반차 유형이면 안 띄움
-   * - 출근 시간대(07-10시)에 start 미입력
-   * - 퇴근 시간대(16-22시)에 end 미입력
+   * - 평일이고 오늘 날짜가 보고 있는 월에 속하며 휴일/휴가/패밀리/반차 유형이 아닐 때
+   * - start 미입력: 출근 시간대 시작(cfg.startTimeFrom) 이후엔 항상 표시.
+   *   현재 시각이 출근 가능 범위(startTimeFrom~startTimeTo)를 벗어나면 그 범위 안으로 클램프.
+   *   예) 11시에 켜도 출근 최대(10시)로 표시.
+   * - end 미입력: 퇴근 시간대 시작(cfg.endTimeFrom) 이후엔 항상 표시.
+   *   범위 벗어나면 cfg.endTimeFrom~cfg.endTimeTo로 클램프.
    * - 닫기 누르면 새로고침 전까지 다시 안 뜸
    */
   const nowPrompt = useMemo(() => {
@@ -768,17 +770,36 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     const today = schedule[todayDateString];
     if (today?.type && today.type !== 'normal') return null;
 
-    const total = now.getHours() * 60 + now.getMinutes();
-    const rounded = Math.round(total / 30) * 30;
-    const h = Math.floor(rounded / 60) % 24;
-    const m = rounded % 60;
-    const time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    const toMin = (hhmm: string) => {
+      const [h, m] = hhmm.split(':').map(Number);
+      return h * 60 + m;
+    };
+    const fmt = (mins: number) => {
+      const h = Math.floor(mins / 60) % 24;
+      const m = mins % 60;
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    };
+    const round30Clamp = (mins: number, lo: number, hi: number) => {
+      const r = Math.round(mins / 30) * 30;
+      return Math.max(lo, Math.min(hi, r));
+    };
 
-    const hour = now.getHours();
-    if (hour >= 7 && hour <= 10 && !today?.start) return { kind: 'start' as const, time };
-    if (hour >= 16 && hour <= 22 && !today?.end) return { kind: 'end' as const, time };
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const startFrom = toMin(cfg.startTimeFrom);
+    const startTo = toMin(cfg.startTimeTo);
+    const endFrom = toMin(cfg.endTimeFrom);
+    const endTo = toMin(cfg.endTimeTo);
+
+    // 출근 미입력 + 출근 가능 시간대 시작 이후 → start 프롬프트 (시간은 클램프)
+    if (!today?.start && nowMin >= startFrom) {
+      return { kind: 'start' as const, time: fmt(round30Clamp(nowMin, startFrom, startTo)) };
+    }
+    // 퇴근 미입력 + 퇴근 가능 시간대 시작 이후 → end 프롬프트 (시간은 클램프)
+    if (today?.start && !today?.end && nowMin >= endFrom) {
+      return { kind: 'end' as const, time: fmt(round30Clamp(nowMin, endFrom, endTo)) };
+    }
     return null;
-  }, [todayDateString, schedule, isDataLoaded, selectedMonth, nowPromptDismissed]);
+  }, [todayDateString, schedule, isDataLoaded, selectedMonth, nowPromptDismissed, cfg.startTimeFrom, cfg.startTimeTo, cfg.endTimeFrom, cfg.endTimeTo]);
 
   const acceptNowPrompt = () => {
     if (!nowPrompt) return;
