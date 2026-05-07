@@ -753,11 +753,10 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
   /**
    * "지금 출근/퇴근" 1-탭 기록 안내.
    * - 평일이고 오늘 날짜가 보고 있는 월에 속하며 휴일/휴가/패밀리/반차 유형이 아닐 때
-   * - start 미입력: 출근 시간대 시작(cfg.startTimeFrom) 이후엔 항상 표시.
-   *   현재 시각이 출근 가능 범위(startTimeFrom~startTimeTo)를 벗어나면 그 범위 안으로 클램프.
-   *   예) 11시에 켜도 출근 최대(10시)로 표시.
-   * - end 미입력: 퇴근 시간대 시작(cfg.endTimeFrom) 이후엔 항상 표시.
-   *   범위 벗어나면 cfg.endTimeFrom~cfg.endTimeTo로 클램프.
+   * - start 미입력: 항상 표시. 시간은 cfg.startTimeFrom~startTimeTo로 클램프.
+   *   예) 6시에 켜면 7:00, 11시에 켜면 10:00, 8:43이면 08:30 (30분 반올림).
+   * - end 미입력 + start 입력됨: 항상 표시. 시간은 cfg.endTimeFrom~endTimeTo로 클램프.
+   *   예) 14시에 켜면 16:00, 23:30에 켜면 23:00.
    * - 닫기 누르면 새로고침 전까지 다시 안 뜸
    */
   const nowPrompt = useMemo(() => {
@@ -790,12 +789,12 @@ const apply = () => setTheme((t) => themeOrder[(themeOrder.indexOf(t) + 1) % the
     const endFrom = toMin(cfg.endTimeFrom);
     const endTo = toMin(cfg.endTimeTo);
 
-    // 출근 미입력 + 출근 가능 시간대 시작 이후 → start 프롬프트 (시간은 클램프)
-    if (!today?.start && nowMin >= startFrom) {
+    // 출근 미입력 → 항상 start 프롬프트 (시간은 항상 출근 범위로 클램프)
+    if (!today?.start) {
       return { kind: 'start' as const, time: fmt(round30Clamp(nowMin, startFrom, startTo)) };
     }
-    // 퇴근 미입력 + 퇴근 가능 시간대 시작 이후 → end 프롬프트 (시간은 클램프)
-    if (today?.start && !today?.end && nowMin >= endFrom) {
+    // 출근 입력됐지만 퇴근 미입력 → 항상 end 프롬프트 (시간은 퇴근 범위로 클램프)
+    if (today?.start && !today?.end) {
       return { kind: 'end' as const, time: fmt(round30Clamp(nowMin, endFrom, endTo)) };
     }
     return null;
